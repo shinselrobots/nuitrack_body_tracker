@@ -1,0 +1,7 @@
+<launch>
+  <node pkg="nuitrack_body_tracker" type="nuitrack_body_tracker_node" name="nuitrack_body_tracker_node" output="screen">
+ 
+  </node>
+
+</launch>
+

@@ -1,12 +1,17 @@
 /* Body Tracker Node using Nuitrack library
 
-   Publish data as 2 messages:
+   Publish data as 3 messages:
    
    1. 2D position of person relative to head camera; allows for fast, smooth tracking
    Joint.proj:  position in normalized projective coordinates
    (x, y from 0.0 to 1.0, z is real)
    Astra Mini FOV: 60 horz, 49.5 vert (degrees)
-   Publish using geometry_msgs/Pose2D.msg (body_tracking_pose_pub_)
+   Publish using geometry_msgs/Pose2D.msg (body_tracking_pose3D_pub_)
+
+   2. 3D position of the neck joint in relation to robot (using TF)
+   Joint.real: position in real world coordinates
+   Publish using geometry_msgs/PoseStamped.msg (body_tracking_pose3D_pub_)
+   Useful for tracking person in 3D
    
    2. 3D position of joint in relation to robot (using TF)
    Joint.real: position in real world coordinates
@@ -26,9 +31,13 @@
 #include <iomanip>  // setprecision
 
 #include "geometry_msgs/PoseStamped.h"
+#include "geometry_msgs/Pose2D.h"
 #include <visualization_msgs/Marker.h>
 #include "body_tracker_msgs/BodyTracker.h"  // Publish custom message
 
+// If Camera mounted on Pan/Tilt head
+//#include "sensor_msgs/JointState.h"
+#include "dynamixel_msgs/JointState.h"
 
 //For Nuitrack SDK
 #include "nuitrack/Nuitrack.h"
@@ -50,11 +59,16 @@ namespace nuitrack_body_tracker
       ros::NodeHandle nodeHandle("~");
       nodeHandle.param<std::string>("camera_depth_frame",camera_depth_frame_,"camera_depth_frame");
 
-      // Publishers
+      // Publishers and Subscribers
+
+      // Publish tracked person as a 2DPose message, for camera servo tracking
+      // NOTE: we send person ID in the "theta" slot
+      body_tracking_pose2D_pub_ = nh_.advertise<geometry_msgs::Pose2D>
+        ("body_tracker/pose2d", 1); 
 
       // Publish tracked person as a basic Pose message, for basic use
       // NOTE: We only provide to POSITION not full pose
-      body_tracking_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>
+      body_tracking_pose3D_pub_ = nh_.advertise<geometry_msgs::PoseStamped>
         ("body_tracker/pose", 1); 
 
       // Publish tracked person upper body skeleton for advanced uses
@@ -64,6 +78,15 @@ namespace nuitrack_body_tracker
       // Publish markers to show where robot thinks person is in RViz
       marker_pub_ = nh_.advertise<visualization_msgs::Marker>
         ("body_tracker/marker", 1);
+
+      // Publish gestures to indicate active user to track
+      // TODO fix this KLUDGE - using Pose2d, need custom message!
+      body_tracking_gesture_pub_ = nh_.advertise<geometry_msgs::Pose2D>
+        ("body_tracker/gesture", 1); 
+
+
+      // Subscribe to servo messages, so provided data is as "real time" as possible for smooth tracking
+      //servo_pan_sub_ = nh_.subscribe("/head_pan_controller/state", 1, &nuitrack_body_tracker_node::servoPanCallback, this);
 
     }
 
@@ -98,7 +121,7 @@ namespace nuitrack_body_tracker
 	    auto skeletons = userSkeletons->getSkeletons();
 	    for (auto skeleton: skeletons)
 	    {
-	      std::cout << "Nuitrack: Skeleton.id = " << skeleton.id << std::endl;
+	      // std::cout << "Nuitrack: Skeleton.id = " << skeleton.id << std::endl;
 
         // Use JOINT_NECK to determine if we have a good lock on the person
         float tracking_confidence = skeleton.joints[JOINT_NECK].confidence;
@@ -118,6 +141,31 @@ namespace nuitrack_body_tracker
 
 
         ///////////////////////////////////////////////////////////////
+        // 2D position for camera servo tracking
+        const float ASTRA_MINI_FOV_X = -1.047200; // (60 degrees horizontal)
+        const float ASTRA_MINI_FOV_Y = -0.863938; // (49.5 degrees vertical)
+
+        // Convert projection to radians
+        // proj is 0.0 (left) --> 1.0 (right)
+        geometry_msgs::Pose2D track2d;
+        track2d.x = (skeleton.joints[JOINT_NECK].proj.x - 0.5) * ASTRA_MINI_FOV_X;
+        track2d.y = (skeleton.joints[JOINT_NECK].proj.y - 0.5) * ASTRA_MINI_FOV_Y;
+        track2d.theta = (float)skeleton.id;
+
+        /* DEBUG
+        std::cout << std::setprecision(4) << std::setw(7) 
+          << "Nuitrack: " << "2D Tracking"  
+          << " x: " << track2d.x 
+          << " y: " << track2d.y
+          << " ID: " << track2d.theta
+          << std::endl;
+         */
+        // Publish pose2D
+        body_tracking_pose2D_pub_.publish(track2d); 
+
+
+
+        ///////////////////////////////////////////////////////////////
         // Basic Pose for person location tracking
         // This is for compatability with other trackers, which use PoseStamped messages
         geometry_msgs::PoseStamped body_pose;
@@ -128,6 +176,7 @@ namespace nuitrack_body_tracker
         body_pose.pose.position.y = skeleton.joints[JOINT_NECK].real.x / -1000.0;
         body_pose.pose.position.z = skeleton.joints[JOINT_NECK].real.y / 1000.0;
 
+        /* DEBUG
         std::cout << std::setprecision(4) << std::setw(7) 
           << "Nuitrack: " << "JOINT_NECK"  
           << " x: " << (float)body_pose.pose.position.x 
@@ -135,6 +184,17 @@ namespace nuitrack_body_tracker
           << " z: " << body_pose.pose.position.z
           << "  Confidence: " << skeleton.joints[JOINT_NECK].confidence
           << std::endl;
+        */
+
+        // Publish pose and pose marker
+        body_tracking_pose3D_pub_.publish(body_pose); // this is position only!
+
+        PublishMarker(  // show marker at body_pose message location
+          1, // ID
+          body_pose.pose.position.x, // Distance to person = ROS X
+          body_pose.pose.position.y, // side to side = ROS Y
+          body_pose.pose.position.z, // Height = ROS Z
+          1.0, 0.0, 1.0 ); // r,g,b
 
 
         ///////////////////////////////////////////////////////////////
@@ -207,24 +267,44 @@ namespace nuitrack_body_tracker
 
 	      for (int i = 0; i < userGestures_.size(); ++i)
 	      {
-          if(userGestures_[i].userId == skeleton.id) // match which person being tracked
+          //if(userGestures_[i].userId == skeleton.id) // match which person being tracked
           {
             skeleton_data.gesture = userGestures_[i].type; // TODO - map Nuitrack to my MSG enum
           }
-		      printf("Gesture Recognized %d for User %d\n", userGestures_[i].type, userGestures_[i].userId);
+          if(userGestures_[i].type != 0)
+          {
+		        printf("Gesture Recognized %d for User %d\n", 
+              userGestures_[i].type, userGestures_[i].userId);
+          }
 	      }
 
 
         ////////////////////////////////////////////////////
-        // Publish
-        body_tracking_pose_pub_.publish(body_pose); // this is position only!
+        // Publish skeleton and skeleton markers
+
         body_tracking_skeleton_pub_.publish(skeleton_data); // full skeleton data
-        PublishMarker(  // show marker at body_pose message location
-          1, // ID
-          body_pose.pose.position.x, // Distance to person = ROS X
-          body_pose.pose.position.y, // side to side = ROS Y
-          body_pose.pose.position.z, // Height = ROS Z
-          1.0, 0.0, 1.0 ); // r,g,b
+
+        PublishMarker(
+          3, // ID
+          skeleton_data.joint_position_head.x,
+          skeleton_data.joint_position_head.y,
+          skeleton_data.joint_position_head.z,
+          0.7, 0.7, 0.7 ); // r,g,b
+
+        PublishMarker(
+          4, // ID
+          skeleton_data.joint_position_spine_top.x,
+          skeleton_data.joint_position_spine_top.y,
+          skeleton_data.joint_position_spine_top.z,
+          0.0, 0.0, 1.0 ); // r,g,b
+
+        PublishMarker(
+          5, // ID
+          skeleton_data.joint_position_spine_mid.x,
+          skeleton_data.joint_position_spine_mid.y,
+          skeleton_data.joint_position_spine_mid.z,
+          0.0, 1.0, 0.0 ); // r,g,b
+
  	    }
 
     }
@@ -244,12 +324,21 @@ namespace nuitrack_body_tracker
 	    for (int i = 0; i < userGestures_.size(); ++i)
 	    {
 		    printf("Recognized %d from %d\n", userGestures_[i].type, userGestures_[i].userId);
+
+        // TODO fix this KLUDGE - using Pose2D message to pass userID and gesture!
+        geometry_msgs::Pose2D gesture;
+        gesture.x = userGestures_[i].type;  // Passing gesture in "x"
+        gesture.y = 0.0;
+        gesture.theta = (float)userGestures_[i].userId; // Passing ID in "theta"
+
+        body_tracking_gesture_pub_.publish(gesture); 
 	    }
 
     }
 
 
-    void PublishMarker(int id, float x, float y, float z, float color_r, float color_g, float color_b)
+    void PublishMarker(int id, float x, float y, float z, 
+                       float color_r, float color_g, float color_b)
     {
       // Display marker for RVIZ to show where robot thinks person is
       // For Markers info, see http://wiki.ros.org/rviz/Tutorials/Markers%3A%20Basic%20Shapes
@@ -293,12 +382,20 @@ namespace nuitrack_body_tracker
 
     }
 
+    /*
+    void servoPanCallback(const dynamixel_msgs::JointState::ConstPtr& msg)
+    {
+      // Called on each pan servo update
+      double current_pos = msg->current_pos;
+      printf ("\n\nDBG PAN SERVO: %f\n\n", current_pos);
+
+    }
+    */
 
     // Publish 2D position of person, relative to camera
     // useful for direct control of servo pan/tilt for tracking
     // Example: publishJoint2D("JOINT_NECK", joints[JOINT_NECK]);
 
-    /* Not currently used
     void publishJoint2D(const char *name, const tdv::nuitrack::Joint& joint)
     {
       const float ASTRA_MINI_FOV_X =  1.047200; // (60 degrees horizontal)
@@ -322,7 +419,6 @@ namespace nuitrack_body_tracker
       // Future? Add in servo position to get absolute position relative to the robot body
       // This allows the subscriber to use these values directly for servo control
     }
-    */
 
 
     ///////////////////////////////////////////////////////////////////////////
@@ -463,9 +559,12 @@ namespace nuitrack_body_tracker
     std::string _name;
     ros::NodeHandle nh_;
     std::string camera_depth_frame_;
-    ros::Publisher body_tracking_pose_pub_;
+    ros::Publisher body_tracking_pose2D_pub_;
+    ros::Publisher body_tracking_pose3D_pub_;
     ros::Publisher body_tracking_skeleton_pub_;
+    ros::Publisher body_tracking_gesture_pub_;
     ros::Publisher marker_pub_;
+    //ros::Subscriber servo_pan_sub_;
 
 	  int width_, height_;
 	  tdv::nuitrack::OutputMode outputMode_;

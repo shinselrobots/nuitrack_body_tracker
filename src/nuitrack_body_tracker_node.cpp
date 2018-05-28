@@ -71,7 +71,7 @@ namespace nuitrack_body_tracker
       // Publish tracked person in 2D and 3D
       // 2D: x,y in camera frame.   3D: x,y,z in world coordinates
       body_tracking_position_pub_ = nh_.advertise<body_tracker_msgs::BodyTracker>
-        ("body_tracker/position", 3); 
+        ("body_tracker/position", 1); 
 
       // Publish tracked person upper body skeleton for advanced uses
       body_tracking_skeleton_pub_ = nh_.advertise<body_tracker_msgs::Skeleton>

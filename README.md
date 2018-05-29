@@ -2,8 +2,9 @@
 
 # Info
    This is a ROS Node to provide functionality of the NuiTrack SDK (https://nuitrack.com)
-   NuiTrack is NOT FREE, but reasonably inexpensive, and works a number of cameras (see webpage)
-   Also see Orbbec Astra SDK as alternative (but only for Orbbec cameras)
+   
+   - NuiTrack is NOT FREE, but reasonably inexpensive, and works with a number of cameras (see their webpage)
+   - Also see Orbbec Astra SDK as a possible alternative (but only for Orbbec cameras)
 
    Publishes 3 messages:
    
@@ -29,6 +30,10 @@
 
 # Installation Instructions / Prerequisites
 
+  - Clone body_tracker_msgs into your Catkin workspace 
+    - catkin_make to confirm complies OK
+  - Clone this project into your Catkin workspace
+  
   - Remove OpenNI - it conflicts with the version supplied by NuiTrack!
     -   sudo apt-get purge --auto-remove openni-utils
   - Download BOTH the nuitrack linux drivers and the Nuitrack SDK

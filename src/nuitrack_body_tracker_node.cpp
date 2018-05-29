@@ -202,6 +202,7 @@ namespace nuitrack_body_tracker
         ///////////////////////////////////////////////////////////////
         // Basic Pose for person location tracking
         // This is for compatability with other trackers, which use PoseStamped messages
+/***
         geometry_msgs::PoseStamped body_pose;
         body_pose.header.frame_id = camera_depth_frame_;
         body_pose.header.stamp = ros::Time::now();
@@ -210,6 +211,7 @@ namespace nuitrack_body_tracker
         body_pose.pose.position.y = skeleton.joints[KEY_JOINT_TO_TRACK].real.x / -1000.0;
         body_pose.pose.position.z = skeleton.joints[KEY_JOINT_TO_TRACK].real.y / 1000.0;
 
+***/
         /*
         std::cout << std::setprecision(4) << std::setw(7) 
           << "Nuitrack: " << "KEY_JOINT_TO_TRACK"  
@@ -223,13 +225,6 @@ namespace nuitrack_body_tracker
         // Publish pose 
         // body_tracking_pose3d_pub_.publish(body_pose); // this is position only!
 
-        // Publish position marker 
-        PublishMarker(  // show marker at body_pose message location
-          1, // ID
-          body_pose.pose.position.x, // Distance to person = ROS X
-          body_pose.pose.position.y, // side to side = ROS Y
-          body_pose.pose.position.z, // Height = ROS Z
-          1.0, 0.0, 1.0 ); // r,g,b
 
 
         ///////////////////////////////////////////////////////////////
@@ -333,12 +328,20 @@ namespace nuitrack_body_tracker
         body_tracking_skeleton_pub_.publish(skeleton_data); // full skeleton data
 
         // Publish skeleton markers
+
+        PublishMarker(  // show marker at KEY_JOINT_TO_TRACK location
+          1, // ID
+          position_data.position3d.x, 
+          position_data.position3d.y, 
+          position_data.position3d.z, 
+          1.0, 0.0, 0.0 ); // r,g,b
+
         PublishMarker(
           3, // ID
           skeleton_data.joint_position_head.x,
           skeleton_data.joint_position_head.y,
           skeleton_data.joint_position_head.z,
-          0.7, 0.7, 0.7 ); // r,g,b
+          0.7, 0.0, 0.7 ); // r,g,b
 
         PublishMarker(
           4, // ID
@@ -402,7 +405,7 @@ namespace nuitrack_body_tracker
       visualization_msgs::Marker marker;
       marker.header.frame_id = camera_depth_frame_;
       marker.header.stamp = ros::Time::now();
-
+      marker.lifetime = ros::Duration(3.0); // seconds
       // Any marker sent with the same namespace and id will overwrite the old one
       marker.ns = _name;
       marker.id = id; // This must be id unique for each marker

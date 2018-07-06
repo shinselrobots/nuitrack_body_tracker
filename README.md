@@ -44,4 +44,9 @@
     - Install Nuitrack SDK:
     -  extract with GUI, copy to home directory
 
+# Test NuiTrack SDK
+  - REBOOT!  If you run into errors, it is probably becuse you did not reboot.
+  - Follow instructions at: ~/NuitrackSDK/Examples/nuitrack_gl_sample/README.txt
+
+
 

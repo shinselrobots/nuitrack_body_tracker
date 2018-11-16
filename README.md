@@ -33,7 +33,7 @@
 ## Follow instructions on Nuitrack website
   - http://download.3divi.com/Nuitrack/doc/Installation_page.html
 
-### Summary instructions below, but might not be up to date!  Go to the website to get the latest SDK.
+### Summary instructions below, but bits might not be up to date!  Go to the website to get the latest SDK.
 
 
   - Clone body_tracker_msgs into your Catkin workspace 

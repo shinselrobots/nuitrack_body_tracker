@@ -130,6 +130,24 @@ namespace nuitrack_body_tracker
     void onSkeletonUpdate(SkeletonData::Ptr userSkeletons)
     {
 	    // std::cout << "Nuitrack: onSkeletonUpdate callback" << std::endl;
+
+
+      std::string face_info = tdv::nuitrack::Nuitrack::getInstancesJson();
+
+      // from https://stackoverflow.com/questions/32205981/reading-json-files-in-c
+
+       std::cout << face_info; //This will print the entire json object.
+
+      //The following lines will let you access the indexed objects.
+      //std::cout << face_info["Instances"]; 
+      //std::cout << face_info["Instances"]["id"]; 
+      //std::cout << face_info["Instances"]["class"]; 
+      //std::cout << face_info["Instances"]["face"]; 
+      //std::cout << face_info["Instances"]["face"]["rectangle"]; 
+
+
+
+
 	    auto skeletons = userSkeletons->getSkeletons();
 	    for (auto skeleton: skeletons)
 	    {
@@ -633,6 +651,12 @@ namespace nuitrack_body_tracker
 	  tdv::nuitrack::SkeletonTracker::Ptr skeletonTracker_;
 	  tdv::nuitrack::HandTracker::Ptr handTracker_;
 	  tdv::nuitrack::GestureRecognizer::Ptr gestureRecognizer_;
+	  //tdv::nuitrack::getInstancesJson::Ptr getInstancesJson;
+
+
+/* Note from http://download.3divi.com/Nuitrack/doc/Instance_based_API.html
+Face modules are by default disabled. To enable face modules, open nuitrack.config file and set Faces.ToUse and DepthProvider.Depth2ColorRegistration to true.
+*/
 
   };
 };  // namespace nuitrack_body_tracker

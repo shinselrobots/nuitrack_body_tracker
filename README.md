@@ -1,4 +1,4 @@
-# NuiTrack Body Tracker
+# Nuitrack Body Tracker
 
 # Info
    This is a ROS Node to provide functionality of the NuiTrack SDK (https://nuitrack.com)
@@ -30,22 +30,43 @@
 
 # Installation Instructions / Prerequisites
 
+## Follow instructions on Nuitrack website
+  - http://download.3divi.com/Nuitrack/doc/Installation_page.html
+
+### Summary instructions below, but might not be up to date!  Go to the website to get the latest SDK.
+
+
   - Clone body_tracker_msgs into your Catkin workspace 
     - catkin_make to confirm complies OK
+
   - Clone this project into your Catkin workspace
   
-  - Remove OpenNI - it conflicts with the version supplied by NuiTrack!
+  - Remove OpenNI - it conflicts with the version supplied by Nuitrack!
     -   sudo apt-get purge --auto-remove openni-utils
+
   - Download BOTH the nuitrack linux drivers and the Nuitrack SDK
 
-  - Install Linux drivers:
-    -   sudo dpkg -i <downloaded-package-name>.deb
+  - Install Nuitrack Linux drivers:
+    -   sudo dpkg -i nuitrack-ubuntu-amd64.deb
+    -   sudo reboot
+    -   confirm environment variables set correctly:
+        - echo $NUITRACK_HOME    (should be /usr/etc/nuitrack)
+        - echo $LD_LIBRARY_PATH  (should include /usr/local/lib/nuitrack)
 
-    - Install Nuitrack SDK:
-    -  extract with GUI, copy to home directory
+  - Install Nuitrack SDK (NuitrackSDK.zip)
+    - mkdir ~/NuiTrackSDK
+    - cp NuitrackSDK.zip ~/NuitrackSDK
+    - extract ZIP archive with ubuntu Archive Manager (double click the zip file)
+    - delete the zip file
 
 # Test NuiTrack SDK
-  - REBOOT!  If you run into errors, it is probably becuse you did not reboot.
+  - If you run into errors, it is probably becuse you did not reboot after driver install
+
+  - Try the license tool, it will test the system:
+    - sudo -E nuitrack_license_tool
+    - click on "compatibility test"
+    - if you have a license, enter it after the test completes.
+
   - Follow instructions at: ~/NuitrackSDK/Examples/nuitrack_gl_sample/README.txt
 
 

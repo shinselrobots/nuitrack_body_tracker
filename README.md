@@ -54,10 +54,14 @@
         - echo $LD_LIBRARY_PATH  (should include /usr/local/lib/nuitrack)
 
   - Install Nuitrack SDK (NuitrackSDK.zip)
-    - mkdir ~/NuiTrackSDK
+    - mkdir ~/sdk/NuitrackSDK
     - cp NuitrackSDK.zip ~/NuitrackSDK
     - extract ZIP archive with ubuntu Archive Manager (double click the zip file)
     - delete the zip file
+
+  - Edit CMakeLists.txt if you installed the SDK to a different location:
+    set(NUITRACK_SDK_PATH /home/system/sdk/NuitrackSDK)
+
 
 # Test NuiTrack SDK
   - If you run into errors, it is probably becuse you did not reboot after driver install
@@ -67,7 +71,7 @@
     - click on "compatibility test"
     - if you have a license, enter it after the test completes.
 
-  - Follow instructions at: ~/NuitrackSDK/Examples/nuitrack_gl_sample/README.txt
+  - Follow instructions at: ~/sdk/NuitrackSDK/Examples/nuitrack_gl_sample/README.txt
 
 
 

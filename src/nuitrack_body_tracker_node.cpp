@@ -9,7 +9,7 @@
      (x, y from 0.0 to 1.0, z is real)
      Astra Mini FOV: 60 horz, 49.5 vert (degrees)
 
-   3D position of the neck joint in relation to robot (using TF)
+   3D position of the person's neck joint in relation to robot (using TF)
      Joint.real: position in real world coordinates
      Useful for tracking person in 3D
    
@@ -81,25 +81,6 @@ namespace nuitrack_body_tracker
       marker_pub_ = nh_.advertise<visualization_msgs::Marker>
         ("body_tracker/marker", 1);
 
-
-      // OPTIONAL: Publish tracked person as a 2DPose message, for camera servo tracking
-      // NOTE: we send person ID in the "theta" slot
-      // body_tracking_pose2d_pub_ = nh_.advertise<geometry_msgs::Pose2D>
-      //  ("body_tracker/pose2d", 1); 
-
-      // OPTIONAL: Publish tracked person as a basic 3D Pose message
-      // body_tracking_pose3d_pub_ = nh_.advertise<geometry_msgs::PoseStamped>
-      //  ("body_tracker/pose", 1); 
-
-      // OPTIONAL: Publish gestures to indicate active user to track
-      // TODO fix this KLUDGE - using Pose2d, need custom message!
-      // body_tracking_gesture_pub_ = nh_.advertise<geometry_msgs::Pose2D>
-      //  ("body_tracker/gesture", 1); 
-
-
-      // Subscribe to servo messages, so provided data is as "real time" as possible for smooth tracking
-      //servo_pan_sub_ = nh_.subscribe("/head_pan_controller/state", 1, &nuitrack_body_tracker_node::servoPanCallback, this);
-
     }
 
     ~nuitrack_body_tracker_node()
@@ -144,9 +125,6 @@ namespace nuitrack_body_tracker
       //std::cout << face_info["Instances"]["class"]; 
       //std::cout << face_info["Instances"]["face"]; 
       //std::cout << face_info["Instances"]["face"]["rectangle"]; 
-
-
-
 
 	    auto skeletons = userSkeletons->getSkeletons();
 	    for (auto skeleton: skeletons)
@@ -210,39 +188,6 @@ namespace nuitrack_body_tracker
           << " y: " << track2d.y
           << " ID: " << track2d.theta
           << std::endl;
-        
-
-        // Publish pose2D
-        // body_tracking_pose2d_pub_.publish(track2d); 
-
-
-
-        ///////////////////////////////////////////////////////////////
-        // Basic Pose for person location tracking
-        // This is for compatability with other trackers, which use PoseStamped messages
-/***
-        geometry_msgs::PoseStamped body_pose;
-        body_pose.header.frame_id = camera_depth_frame_;
-        body_pose.header.stamp = ros::Time::now();
-
-        body_pose.pose.position.x = skeleton.joints[KEY_JOINT_TO_TRACK].real.z / 1000.0;
-        body_pose.pose.position.y = skeleton.joints[KEY_JOINT_TO_TRACK].real.x / -1000.0;
-        body_pose.pose.position.z = skeleton.joints[KEY_JOINT_TO_TRACK].real.y / 1000.0;
-
-***/
-        /*
-        std::cout << std::setprecision(4) << std::setw(7) 
-          << "Nuitrack: " << "KEY_JOINT_TO_TRACK"  
-          << " x: " << (float)body_pose.pose.position.x 
-          << " y: " << body_pose.pose.position.y
-          << " z: " << body_pose.pose.position.z
-          << "  Confidence: " << skeleton.joints[KEY_JOINT_TO_TRACK].confidence
-          << std::endl;
-        */
-
-        // Publish pose 
-        // body_tracking_pose3d_pub_.publish(body_pose); // this is position only!
-
 
 
         ///////////////////////////////////////////////////////////////
@@ -393,18 +338,9 @@ namespace nuitrack_body_tracker
 	    userGestures_ = gestureData->getGestures(); // Save for use in next skeleton frame
 	    for (int i = 0; i < userGestures_.size(); ++i)
 	    {
-		    printf("onNewGesture: Gesture Recognized %d for User %d\n", userGestures_[i].type, userGestures_[i].userId);
+		    printf("onNewGesture: Gesture Recognized %d for User %d\n", 
+          userGestures_[i].type, userGestures_[i].userId);
 
-        // This kludge uses Pose2D message to pass userID and gesture
-        // Better to use the defined custom messages!
-        /*
-        geometry_msgs::Pose2D gesture;
-        gesture.x = userGestures_[i].type;  // Passing gesture in "x"
-        gesture.y = 0.0;
-        gesture.theta = (float)userGestures_[i].userId; // Passing ID in "theta"
-
-        body_tracking_gesture_pub_.publish(gesture); 
-        */
 	    }
 
     }
@@ -455,16 +391,6 @@ namespace nuitrack_body_tracker
 
     }
 
-    /*
-    void servoPanCallback(const dynamixel_msgs::JointState::ConstPtr& msg)
-    {
-      // Called on each pan servo update
-      double current_pos = msg->current_pos;
-      printf ("\n\nDBG PAN SERVO: %f\n\n", current_pos);
-
-    }
-    */
-
     // Publish 2D position of person, relative to camera
     // useful for direct control of servo pan/tilt for tracking
     // Example: publishJoint2D("JOINT_NECK", joints[JOINT_NECK]);
@@ -488,9 +414,6 @@ namespace nuitrack_body_tracker
         << joint.proj.y << " (" << radians_y << ")" 
         // << "  Confidence: " << joint.confidence 
         << std::endl;
-
-      // Future? Add in servo position to get absolute position relative to the robot body
-      // This allows the subscriber to use these values directly for servo control
     }
 
 
@@ -654,9 +577,9 @@ namespace nuitrack_body_tracker
 	  //tdv::nuitrack::getInstancesJson::Ptr getInstancesJson;
 
 
-/* Note from http://download.3divi.com/Nuitrack/doc/Instance_based_API.html
-Face modules are by default disabled. To enable face modules, open nuitrack.config file and set Faces.ToUse and DepthProvider.Depth2ColorRegistration to true.
-*/
+    /* Note from http://download.3divi.com/Nuitrack/doc/Instance_based_API.html
+    Face modules are by default disabled. To enable face modules, open nuitrack.config file and set Faces.ToUse and DepthProvider.Depth2ColorRegistration to true.
+    */
 
   };
 };  // namespace nuitrack_body_tracker

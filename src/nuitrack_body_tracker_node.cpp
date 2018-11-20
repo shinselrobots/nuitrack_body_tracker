@@ -40,6 +40,7 @@
 #include <visualization_msgs/Marker.h>
 #include "body_tracker_msgs/BodyTracker.h"  // Publish custom message
 #include "body_tracker_msgs/Skeleton.h"  // Publish custom message
+#include <sensor_msgs/Image.h>
 
 // If Camera mounted on Pan/Tilt head
 //#include "sensor_msgs/JointState.h"
@@ -81,6 +82,12 @@ namespace nuitrack_body_tracker
       marker_pub_ = nh_.advertise<visualization_msgs::Marker>
         ("body_tracker/marker", 1);
 
+      // Publish the depth frame for other nodes
+      depth_image_pub_ = nh_.advertise<sensor_msgs::Image>
+        ("camera/depth/image", 1);
+      color_image_pub_ = nh_.advertise<sensor_msgs::Image>
+        ("camera/color/image", 1);
+
     }
 
     ~nuitrack_body_tracker_node()
@@ -93,15 +100,119 @@ namespace nuitrack_body_tracker
     // Copy depth frame data, received from Nuitrack, to texture to visualize
     void onNewDepthFrame(DepthFrame::Ptr frame)
     {
-	    // std::cout << "Nuitrack: onNewDepthFrame callback" << std::endl;
+      ROS_INFO("DBG: Nuitrack::onNewDepthFrame()");
+
+      sensor_msgs::Image msg;
+      int _width = 640;
+      int _height = 480;
+
+      const uint16_t* depthPtr = frame->getData();
+
+      float wStep = (float)_width / frame->getCols();
+      float hStep = (float)_height / frame->getRows();
+      float nextVerticalBorder = hStep;
+
+      msg.header.stamp = ros::Time::now();
+      msg.height = _height; // frame->getCols();
+      msg.width = _width; //frame->getRows();
+      msg.encoding = "rgb8";  //sensor_msgs::image_encodings::TYPE_16UC1;
+      msg.is_bigendian = false;
+
+      msg.step = 3 * _width; // sensor_msgs::ImagePtr row step size
+
+      for (size_t i = 0; i < _height; ++i)
+      {
+        if (i == (int)nextVerticalBorder)
+        {
+          nextVerticalBorder += hStep;
+          depthPtr += frame->getCols();
+        }
+
+        int col = 0;
+        float nextHorizontalBorder = wStep;
+        uint16_t depthValue = *depthPtr >> 5;
+
+        for (size_t j = 0; j < _width; ++j ) //, texturePtr += 3)
+        {
+          if (j == (int)nextHorizontalBorder)
+          {
+            ++col;
+            nextHorizontalBorder += wStep;
+            depthValue = *(depthPtr + col) >> 5;
+          }
+
+          // RGB are all the same for depth (monochrome)
+          msg.data.push_back(depthValue); 
+          msg.data.push_back(depthValue);
+          msg.data.push_back(depthValue);
+        }
+      }
+
+      depth_image_pub_.publish(msg);
+
     }
 
-    /* Not used (yet?)
-    void onNewRGBFrame(RGBFrame::Ptr frame)
+    void onNewColorFrame(RGBFrame::Ptr frame)
     {
-	    std::cout << "Nuitrack: onNewRGBFrame callback" << std::endl;
+      ROS_INFO("DBG: Nuitrack::onNewColorFrame()");
+
+      sensor_msgs::Image msg;
+      int _width = 640;
+      int _height = 480;
+
+      //uint8_t* texturePtr = _textureBuffer;
+      //const uint16_t* depthPtr = frame->getData();
+    	const tdv::nuitrack::Color3* colorPtr = frame->getData();
+
+      float wStep = (float)_width / frame->getCols();
+      float hStep = (float)_height / frame->getRows();
+      float nextVerticalBorder = hStep;
+
+      msg.header.stamp = ros::Time::now();
+      msg.height = _height; // frame->getCols();
+      msg.width = _width; //frame->getRows();
+      msg.encoding = "rgb8";  //sensor_msgs::image_encodings::TYPE_16UC1;
+      msg.is_bigendian = false;
+
+      msg.step = 3 * _width; // sensor_msgs::ImagePtr row step size
+
+      for (size_t i = 0; i < _height; ++i)
+      {
+        if (i == (int)nextVerticalBorder)
+        {
+          nextVerticalBorder += hStep;
+          colorPtr += frame->getCols();
+        }
+
+        int col = 0;
+        float nextHorizontalBorder = wStep;
+
+        for (size_t j = 0; j < _width; ++j ) //, texturePtr += 3)
+        {
+          if (j == (int)nextHorizontalBorder)
+          {
+            ++col;
+            nextHorizontalBorder += wStep;
+          }
+
+          //uint16_t rValue = (colorPtr + col)->red;
+          //uint16_t gValue = (colorPtr + col)->green;
+          //uint16_t bValue = (colorPtr + col)->blue;
+
+          msg.data.push_back((colorPtr + col)->red); 
+          msg.data.push_back((colorPtr + col)->green);
+          msg.data.push_back((colorPtr + col)->blue);
+
+          //texturePtr[0] = depthValue; 
+          //texturePtr[1] = depthValue;
+          //texturePtr[2] = depthValue;
+        }
+      }
+
+      color_image_pub_.publish(msg);
+
+
     }
-    */
 
     void onUserUpdate(tdv::nuitrack::UserFrame::Ptr frame)
     {
@@ -447,20 +558,24 @@ namespace nuitrack_body_tracker
 	    depthSensor_->connectOnNewFrame(std::bind(
       &nuitrack_body_tracker_node::onNewDepthFrame, this, std::placeholders::_1));
 	
+	    std::cout << "Nuitrack: ColorSensor::create()" << std::endl;
+	    colorSensor_ = tdv::nuitrack::ColorSensor::create();
+	    // Bind to event new frame
+	    colorSensor_->connectOnNewFrame(std::bind(
+      &nuitrack_body_tracker_node::onNewColorFrame, this, std::placeholders::_1));
+	
       outputMode_ = depthSensor_->getOutputMode();
+    	OutputMode colorOutputMode = colorSensor_->getOutputMode();
+	    if (colorOutputMode.xres > outputMode_.xres)
+		    outputMode_.xres = colorOutputMode.xres;
+	    if (colorOutputMode.yres > outputMode_.yres)
+		    outputMode_.yres = colorOutputMode.yres;
+
 	    width_ = outputMode_.xres;
 	    height_ = outputMode_.yres;
       last_id_ = -1;
       std::cout << "========= Nuitrack: GOT DEPTH SENSOR =========" << std::endl;
 	    std::cout << "Nuitrack: Depth:  width = " << width_ << "  height = " << height_ << std::endl;
-
-      /*  Color frame not currently used
-	    std::cout << "Nuitrack: ColorSensor::create()" << std::endl;
-	    colorSensor_ = tdv::nuitrack::ColorSensor::create();
-	    // Bind to event new frame
-	    colorSensor_->connectOnNewFrame(std::bind(
-        &nuitrack_body_tracker_node::onNewRGBFrame, this, std::placeholders::_1));
-	    */
 
 	    std::cout << "Nuitrack: UserTracker::create()" << std::endl;
 	    userTracker_ = tdv::nuitrack::UserTracker::create();
@@ -561,6 +676,9 @@ namespace nuitrack_body_tracker
     ros::Publisher body_tracking_position_pub_;
     ros::Publisher body_tracking_skeleton_pub_;
     ros::Publisher marker_pub_;
+    ros::Publisher depth_image_pub_;
+    ros::Publisher color_image_pub_;
+
     //ros::Publisher body_tracking_pose2d_pub_;
     //ros::Publisher body_tracking_pose3d_pub_;
     //ros::Publisher body_tracking_gesture_pub_;

@@ -50,6 +50,8 @@
 #include "nuitrack/Nuitrack.h"
 #define KEY_JOINT_TO_TRACK    JOINT_LEFT_COLLAR // JOINT_TORSO // JOINT_NECK
 
+const bool ENABLE_PUBLISHING_FRAMES = true;
+
 namespace nuitrack_body_tracker
 {
   using namespace tdv::nuitrack;
@@ -100,7 +102,12 @@ namespace nuitrack_body_tracker
     // Copy depth frame data, received from Nuitrack, to texture to visualize
     void onNewDepthFrame(DepthFrame::Ptr frame)
     {
-      ROS_INFO("DBG: Nuitrack::onNewDepthFrame()");
+      //ROS_INFO("DBG: Nuitrack::onNewDepthFrame()");
+
+      if(!ENABLE_PUBLISHING_FRAMES)
+      {
+        return;
+      }
 
       sensor_msgs::Image msg;
       int _width = 640;
@@ -154,64 +161,40 @@ namespace nuitrack_body_tracker
 
     void onNewColorFrame(RGBFrame::Ptr frame)
     {
-      ROS_INFO("DBG: Nuitrack::onNewColorFrame()");
+      //ROS_INFO("DBG: Nuitrack::onNewColorFrame()");
+
+      if(!ENABLE_PUBLISHING_FRAMES)
+      {
+        return;
+      }
 
       sensor_msgs::Image msg;
-      int _width = 640;
-      int _height = 480;
+      int _width = frame->getCols(); //640;
+      int _height = frame->getRows(); // 480;
 
-      //uint8_t* texturePtr = _textureBuffer;
-      //const uint16_t* depthPtr = frame->getData();
     	const tdv::nuitrack::Color3* colorPtr = frame->getData();
 
-      float wStep = (float)_width / frame->getCols();
-      float hStep = (float)_height / frame->getRows();
-      float nextVerticalBorder = hStep;
-
       msg.header.stamp = ros::Time::now();
-      msg.height = _height; // frame->getCols();
-      msg.width = _width; //frame->getRows();
+      msg.height = _height; // frame->getRows();
+      msg.width = _width;  //frame->getCols();
       msg.encoding = "rgb8";  //sensor_msgs::image_encodings::TYPE_16UC1;
       msg.is_bigendian = false;
 
       msg.step = 3 * _width; // sensor_msgs::ImagePtr row step size
 
-      for (size_t i = 0; i < _height; ++i)
+      for (size_t row = 0; row < _height; ++row)
       {
-        if (i == (int)nextVerticalBorder)
+        for (size_t col = 0; col < _width; ++col )
         {
-          nextVerticalBorder += hStep;
-          colorPtr += frame->getCols();
-        }
-
-        int col = 0;
-        float nextHorizontalBorder = wStep;
-
-        for (size_t j = 0; j < _width; ++j ) //, texturePtr += 3)
-        {
-          if (j == (int)nextHorizontalBorder)
-          {
-            ++col;
-            nextHorizontalBorder += wStep;
-          }
-
-          //uint16_t rValue = (colorPtr + col)->red;
-          //uint16_t gValue = (colorPtr + col)->green;
-          //uint16_t bValue = (colorPtr + col)->blue;
-
           msg.data.push_back((colorPtr + col)->red); 
           msg.data.push_back((colorPtr + col)->green);
           msg.data.push_back((colorPtr + col)->blue);
 
-          //texturePtr[0] = depthValue; 
-          //texturePtr[1] = depthValue;
-          //texturePtr[2] = depthValue;
         }
+        colorPtr += _width; // Next row
       }
 
       color_image_pub_.publish(msg);
-
-
     }
 
     void onUserUpdate(tdv::nuitrack::UserFrame::Ptr frame)

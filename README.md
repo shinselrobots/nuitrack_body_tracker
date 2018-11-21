@@ -62,6 +62,10 @@
   - Edit CMakeLists.txt if you installed the SDK to a different location:
     set(NUITRACK_SDK_PATH /home/system/sdk/NuitrackSDK)
 
+# NOTE: Nuitrack install may break other RealSense applications!
+  - See this discussion: 
+    - https://community.nuitrack.com/t/nuitrack-prevents-other-realsense-apps-from-working/893
+    - if needed: export LD_LIBRARY_PATH="{$LD_LIBRARY_PATH}:/usr/local/lib/nuitrack"
 
 # Test NuiTrack SDK
   - If you run into errors, it is probably becuse you did not reboot after driver install

@@ -110,49 +110,32 @@ namespace nuitrack_body_tracker
       }
 
       sensor_msgs::Image msg;
-      int _width = 640;
-      int _height = 480;
+      int _width = frame->getCols(); 
+      int _height = frame->getRows();
 
       const uint16_t* depthPtr = frame->getData();
 
-      float wStep = (float)_width / frame->getCols();
-      float hStep = (float)_height / frame->getRows();
-      float nextVerticalBorder = hStep;
-
       msg.header.stamp = ros::Time::now();
-      msg.height = _height; // frame->getCols();
-      msg.width = _width; //frame->getRows();
-      msg.encoding = "rgb8";  //sensor_msgs::image_encodings::TYPE_16UC1;
+      msg.height = _height; 
+      msg.width = _width;  
+      msg.encoding = "rgb8";  // see sensor_msgs::image_encodings
       msg.is_bigendian = false;
 
       msg.step = 3 * _width; // sensor_msgs::ImagePtr row step size
 
-      for (size_t i = 0; i < _height; ++i)
+      for (size_t row = 0; row < _height; ++row)
       {
-        if (i == (int)nextVerticalBorder)
+        for (size_t col = 0; col < _width; ++col )
         {
-          nextVerticalBorder += hStep;
-          depthPtr += frame->getCols();
-        }
-
-        int col = 0;
-        float nextHorizontalBorder = wStep;
-        uint16_t depthValue = *depthPtr >> 5;
-
-        for (size_t j = 0; j < _width; ++j ) //, texturePtr += 3)
-        {
-          if (j == (int)nextHorizontalBorder)
-          {
-            ++col;
-            nextHorizontalBorder += wStep;
-            depthValue = *(depthPtr + col) >> 5;
-          }
+          uint16_t depthValue = *(depthPtr+ col) >> 5;
 
           // RGB are all the same for depth (monochrome)
           msg.data.push_back(depthValue); 
           msg.data.push_back(depthValue);
           msg.data.push_back(depthValue);
+
         }
+        depthPtr += _width; // Next row
       }
 
       depth_image_pub_.publish(msg);
@@ -169,14 +152,14 @@ namespace nuitrack_body_tracker
       }
 
       sensor_msgs::Image msg;
-      int _width = frame->getCols(); //640;
-      int _height = frame->getRows(); // 480;
+      int _width = frame->getCols(); 
+      int _height = frame->getRows(); 
 
     	const tdv::nuitrack::Color3* colorPtr = frame->getData();
 
       msg.header.stamp = ros::Time::now();
-      msg.height = _height; // frame->getRows();
-      msg.width = _width;  //frame->getCols();
+      msg.height = _height; 
+      msg.width = _width;  
       msg.encoding = "rgb8";  //sensor_msgs::image_encodings::TYPE_16UC1;
       msg.is_bigendian = false;
 

@@ -151,6 +151,8 @@ namespace nuitrack_body_tracker
         return;
       }
 
+
+
       sensor_msgs::Image msg;
       int _width = frame->getCols(); 
       int _height = frame->getRows(); 
@@ -193,6 +195,7 @@ namespace nuitrack_body_tracker
       std::string face_info = tdv::nuitrack::Nuitrack::getInstancesJson();
 
       // from https://stackoverflow.com/questions/32205981/reading-json-files-in-c
+      // See https://github.com/nlohmann/json
 
        std::cout << face_info; //This will print the entire json object.
 
@@ -515,6 +518,34 @@ namespace nuitrack_body_tracker
         "Can not initialize Nuitrack (ExceptionType: " << e.type() << ")" << std::endl;
 		    exit(EXIT_FAILURE);
 	    }
+
+      // Set config values.  Overrides $NUITRACK_HOME/data/nuitrack.config
+
+      // Align depth and color 
+      Nuitrack::setConfigValue("DepthProvider.Depth2ColorRegistration", "true");
+
+      // Realsense Depth Module - force to 848x480 @ 60 FPS
+      Nuitrack::setConfigValue("Realsense2Module.Depth.Preset", "5");
+      Nuitrack::setConfigValue("Realsense2Module.Depth.RawWidth", "848");
+      Nuitrack::setConfigValue("Realsense2Module.Depth.RawHeight", "480");
+      Nuitrack::setConfigValue("Realsense2Module.Depth.ProcessWidth", "848");
+      Nuitrack::setConfigValue("Realsense2Module.Depth.ProcessHeight", "480");
+      Nuitrack::setConfigValue("Realsense2Module.Depth.FPS", "60");
+
+      // Realsense RGB Module - force to 848x480 @ 60 FPS
+      Nuitrack::setConfigValue("Realsense2Module.RGB.RawWidth", "848");
+      Nuitrack::setConfigValue("Realsense2Module.RGB.RawHeight", "480");
+      Nuitrack::setConfigValue("Realsense2Module.RGB.ProcessWidth", "848");
+      Nuitrack::setConfigValue("Realsense2Module.RGB.ProcessHeight", "480");
+      Nuitrack::setConfigValue("Realsense2Module.RGB.FPS", "60");
+
+      // Enable face tracking
+      Nuitrack::setConfigValue("Faces.ToUse", "true");
+
+      //Options for debug
+      //Nuitrack::setConfigValue("Skeletonization.ActiveUsers", "1");
+      //Nuitrack::setConfigValue("DepthProvider.Mirror", "true");
+
 
 	    // Create all required Nuitrack modules
 

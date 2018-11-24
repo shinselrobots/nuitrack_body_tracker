@@ -67,6 +67,11 @@
     - https://community.nuitrack.com/t/nuitrack-prevents-other-realsense-apps-from-working/893
     - if needed: export LD_LIBRARY_PATH="{$LD_LIBRARY_PATH}:/usr/local/lib/nuitrack"
 
+
+# Option: Edit Nuitrack Config parameters (now done in the node code)
+  - sudo vi $NUITRACK_HOME/data/nuitrack.config
+  - set Faces.ToUse and DepthProvider.Depth2ColorRegistration to true
+
 # Test NuiTrack SDK
   - If you run into errors, it is probably becuse you did not reboot after driver install
 
@@ -76,6 +81,10 @@
     - if you have a license, enter it after the test completes.
 
   - Follow instructions at: ~/sdk/NuitrackSDK/Examples/nuitrack_gl_sample/README.txt
+
+
+
+
 
 
 

@@ -32,6 +32,7 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <sstream>
 #include <iostream>
 #include <iomanip>  // setprecision
 
@@ -50,11 +51,17 @@
 #include "nuitrack/Nuitrack.h"
 #define KEY_JOINT_TO_TRACK    JOINT_LEFT_COLLAR // JOINT_TORSO // JOINT_NECK
 
+// For Face JSON parsing
+#include <boost/property_tree/ptree.hpp>
+#include <boost/property_tree/json_parser.hpp>
+#include <boost/foreach.hpp>
+
 const bool ENABLE_PUBLISHING_FRAMES = true;
 
 namespace nuitrack_body_tracker
 {
   using namespace tdv::nuitrack;
+  //namespace pt = boost::property_tree;
 
   class nuitrack_body_tracker_node 
   {
@@ -151,8 +158,6 @@ namespace nuitrack_body_tracker
         return;
       }
 
-
-
       sensor_msgs::Image msg;
       int _width = frame->getCols(); 
       int _height = frame->getRows(); 
@@ -182,30 +187,18 @@ namespace nuitrack_body_tracker
       color_image_pub_.publish(msg);
     }
 
+
     void onUserUpdate(tdv::nuitrack::UserFrame::Ptr frame)
     {
 	    // std::cout << "Nuitrack: onUserUpdate callback" << std::endl;
     }
 
+
     void onSkeletonUpdate(SkeletonData::Ptr userSkeletons)
     {
 	    // std::cout << "Nuitrack: onSkeletonUpdate callback" << std::endl;
 
-
-      std::string face_info = tdv::nuitrack::Nuitrack::getInstancesJson();
-
-      // from https://stackoverflow.com/questions/32205981/reading-json-files-in-c
-      // See https://github.com/nlohmann/json
-
-       std::cout << face_info; //This will print the entire json object.
-
-      //The following lines will let you access the indexed objects.
-      //std::cout << face_info["Instances"]; 
-      //std::cout << face_info["Instances"]["id"]; 
-      //std::cout << face_info["Instances"]["class"]; 
-      //std::cout << face_info["Instances"]["face"]; 
-      //std::cout << face_info["Instances"]["face"]["rectangle"]; 
-
+      // process skeletons for each user found
 	    auto skeletons = userSkeletons->getSkeletons();
 	    for (auto skeleton: skeletons)
 	    {
@@ -236,8 +229,15 @@ namespace nuitrack_body_tracker
         position_data.body_id = skeleton.id;
         position_data.tracking_status = 0; // TODO
         position_data.gesture = -1; // No gesture
+        position_data.face_found = false;
+        position_data.face_left = 0;
+        position_data.face_top = 0;
+        position_data.face_width = 0;
+        position_data.face_height = 0;
+        position_data.face_age = 0;
+        position_data.face_gender = 0;
 
-        if(skeleton.id != last_id_)
+        //if(skeleton.id != last_id_)
         {
           ROS_INFO("%s: detected person ID %d", _name.c_str(), skeleton.id);
           last_id_ = skeleton.id;
@@ -268,6 +268,166 @@ namespace nuitrack_body_tracker
           << " y: " << track2d.y
           << " ID: " << track2d.theta
           << std::endl;
+
+
+
+        ///////////////////////////////////////////////////////////////
+        // Face Data
+        // if the same ID as skeleton id, publish face data too
+
+        std::string face_info = tdv::nuitrack::Nuitrack::getInstancesJson();
+        //std::cout << face_info; //This will print the entire json object.
+        // Good examples at: http://zenol.fr/blog/boost-property-tree/en.html
+
+        try
+        {
+          std::stringstream ss;
+          ss << face_info;
+          boost::property_tree::ptree root;
+          boost::property_tree::read_json(ss, root);
+
+          // Find all instances of objects (usually people)
+          for(boost::property_tree::ptree::value_type &instance : root.get_child("Instances"))
+          {
+            std::string json_id_str = "";
+            std::string json_class_str = "";
+            int json_id = -1;
+
+            for (boost::property_tree::ptree::value_type &found_object : instance.second)
+            {
+
+              if( "id" == found_object.first)
+              {
+                json_id_str = found_object.second.data();
+                json_id = found_object.second.get_value<int>();
+                std::cout << "FIELD: id = " << json_id_str << " = " << json_id << std::endl;
+
+              }
+              else if( "class" == found_object.first)
+              {
+                std::cout << "FIELD: class = " << found_object.second.data() << std::endl;
+                json_class_str = found_object.second.data();
+
+              }
+              else if( "face" == found_object.first)
+              {
+
+                // See if we found a face ID that matches current skeleton
+                //if( (json_class_str == "human") && (json_id_str != "") )
+                if( !( (json_class_str == "human") && (json_id == skeleton.id) ))
+                {
+                  std::cout << "FACE ID (" << json_id << ") DOES NOT MATCH SKELETON (" <<
+                    skeleton.id << ")... SKIPPING  (or object != Human?)" << std::endl;
+                }
+                else
+                {
+
+                  boost::property_tree::ptree face = found_object.second; // subtree
+                  if(face.empty()) 
+                  {
+                    std::cout << "Face tree is empty!" << std::endl;
+                  }
+                  else
+                  {
+                    // this is a face subtree
+                    std::cout << "FACE FOUND " << std::endl;
+                    position_data.face_found = true;
+                    float face_left, face_top, face_width, face_height;
+                    face_left = face_top = face_width = face_height = 0.0;
+
+                    for(boost::property_tree::ptree::value_type &rectangle : face.get_child("rectangle"))
+                    {
+                      // Face bounding box from 0.0 -> 1.0 (from top left of image) 
+                      // convert to pixel position before publishing              
+                      std::string name = rectangle.first;
+                      std::string val = rectangle.second.data();
+                      std::cout << "FACE RECTANGLE: " << name << " : " << val << std::endl;
+                      
+                      if( rectangle.first == "left")
+                      {
+                        face_left = rectangle.second.get_value<float>();
+                        position_data.face_left = (int)((float)frame_width_ * face_left);
+                      }                      
+                      if( rectangle.first == "top")
+                      {
+                        face_top = rectangle.second.get_value<float>();
+                        position_data.face_top = (int)((float)frame_width_ * face_top);
+                      }                      
+                      if( rectangle.first == "width")
+                      {
+                        face_width = rectangle.second.get_value<float>();
+                        position_data.face_width = (int)((float)frame_width_ * face_width);
+                      }                      
+                      if( rectangle.first == "height")
+                      {
+                        face_height = rectangle.second.get_value<float>();
+                        position_data.face_height = (int)((float)frame_width_ * face_height);
+                      }                      
+                    }
+                    
+                    // Get center of the face bounding box and convert projection to radians
+                    // proj is 0.0 (left) --> 1.0 (right)
+                    
+                    float face_center_proj_x = face_left + (face_width / 2.0);
+                    float face_center_proj_y = face_top + (face_height / 2.0);
+                    position_data.face_center.x = (face_center_proj_x - 0.5) * ASTRA_MINI_FOV_X;
+                    position_data.face_center.y =  (face_center_proj_y - 0.5) * ASTRA_MINI_FOV_Y;
+                    // just use the skeleton location 
+                    position_data.face_center.z = skeleton.joints[JOINT_HEAD].real.z / 1000.0;
+                    
+                    //std::cout << "DBG face_center_proj = " << face_center_proj_x << ", " <<
+                    //  face_center_proj_y << std::endl;
+                      
+                    //std::cout << "DBG face_center_ROS = " << position_data.face_center.x << ", " <<
+                    //  position_data.face_center.y << std::endl;
+
+                    
+                    
+                    for(boost::property_tree::ptree::value_type &angles : face.get_child("angles"))
+                    {
+                      // rectangle is set of std::pair
+                      std::string name = angles.first;
+                      std::string val = angles.second.data();
+                      //std::cout << "FACE ANGLES: " << name << " : " << val << std::endl;
+                      // Not currently published for ROS (future)
+
+                    }
+                    for(boost::property_tree::ptree::value_type &age : face.get_child("age"))
+                    {
+                      // rectangle is set of std::pair
+                      std::string name = age.first;
+                      std::string val = age.second.data();
+                      std::cout << "FACE AGE: " << name << " : " << val << std::endl;
+                      
+                      if( age.first == "years")
+                      {
+                        float face_age = age.second.get_value<float>();
+                        position_data.face_age = (int)face_age;
+                      }                      
+
+                    }
+
+                    std::string gender = face.get<std::string>("gender");
+                    std::cout << "GENDER: " << gender << std::endl;
+                    if("male" == gender)
+                    {
+                      position_data.face_gender = 1;
+                    }
+                    else if("female" == gender)
+                    {
+                      position_data.face_gender = 2;
+                    }
+
+                  }
+                }
+              }
+            }
+          }
+        }
+        catch (std::exception const& e)
+        {
+          std::cerr << e.what() << std::endl;
+        }
 
 
         ///////////////////////////////////////////////////////////////
@@ -568,11 +728,13 @@ namespace nuitrack_body_tracker
 	    if (colorOutputMode.yres > outputMode_.yres)
 		    outputMode_.yres = colorOutputMode.yres;
 
-	    width_ = outputMode_.xres;
-	    height_ = outputMode_.yres;
+      // Use the larger of color or depth frame size
+	    frame_width_ = outputMode_.xres;
+	    frame_height_ = outputMode_.yres;
       last_id_ = -1;
       std::cout << "========= Nuitrack: GOT DEPTH SENSOR =========" << std::endl;
-	    std::cout << "Nuitrack: Depth:  width = " << width_ << "  height = " << height_ << std::endl;
+	    std::cout << "Nuitrack: Depth:  width = " << frame_width_ << 
+	      "  height = " << frame_height_ << std::endl;
 
 	    std::cout << "Nuitrack: UserTracker::create()" << std::endl;
 	    userTracker_ = tdv::nuitrack::UserTracker::create();
@@ -668,7 +830,7 @@ namespace nuitrack_body_tracker
     std::string _name;
     ros::NodeHandle nh_;
     std::string camera_depth_frame_;
-	  int width_, height_;
+	  int frame_width_, frame_height_;
     int last_id_;
     ros::Publisher body_tracking_position_pub_;
     ros::Publisher body_tracking_skeleton_pub_;

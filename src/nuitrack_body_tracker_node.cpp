@@ -8,6 +8,8 @@
      Joint.proj:  position in normalized projective coordinates
      (x, y from 0.0 to 1.0, z is real)
      Astra Mini FOV: 60 horz, 49.5 vert (degrees)
+     
+     body_tracking_array_pub_ : multiple person detections in one message
 
    3D position of the person's neck joint in relation to robot (using TF)
      Joint.real: position in real world coordinates
@@ -36,12 +38,13 @@
 #include <iostream>
 #include <iomanip>  // setprecision
 
-#include "geometry_msgs/PoseStamped.h"
-#include "geometry_msgs/Pose2D.h"
-#include <visualization_msgs/Marker.h>
-#include "body_tracker_msgs/BodyTracker.h"  // Publish custom message
-#include "body_tracker_msgs/Skeleton.h"  // Publish custom message
+#include <geometry_msgs/PoseStamped.h>
+#include <geometry_msgs/Pose2D.h>
 #include <sensor_msgs/Image.h>
+#include <visualization_msgs/Marker.h>
+#include <body_tracker_msgs/BodyTracker.h>       // Publish custom message
+#include <body_tracker_msgs/BodyTrackerArray.h>  // Custom message, multiple people 
+#include <body_tracker_msgs/Skeleton.h>          // Publish custom message
 
 // If Camera mounted on Pan/Tilt head
 //#include "sensor_msgs/JointState.h"
@@ -75,6 +78,7 @@ namespace nuitrack_body_tracker
 
       ros::NodeHandle nodeHandle("~");
       nodeHandle.param<std::string>("camera_depth_frame",camera_depth_frame_,"camera_depth_frame");
+      nodeHandle.param<std::string>("camera_color_frame",camera_color_frame_,"camera_color_frame");
 
       // Publishers and Subscribers
 
@@ -82,6 +86,10 @@ namespace nuitrack_body_tracker
       // 2D: x,y in camera frame.   3D: x,y,z in world coordinates
       body_tracking_position_pub_ = nh_.advertise<body_tracker_msgs::BodyTracker>
         ("body_tracker/position", 1); 
+
+      body_tracking_array_pub_ =
+        nh_.advertise<body_tracker_msgs::BodyTrackerArray>
+        ("body_tracker_array/position", 1); 
 
       // Publish tracked person upper body skeleton for advanced uses
       body_tracking_skeleton_pub_ = nh_.advertise<body_tracker_msgs::Skeleton>
@@ -123,8 +131,9 @@ namespace nuitrack_body_tracker
       const uint16_t* depthPtr = frame->getData();
 
       msg.header.stamp = ros::Time::now();
+      msg.header.frame_id = camera_depth_frame_;
       msg.height = _height; 
-      msg.width = _width;  
+      msg.width = _width; 
       msg.encoding = "rgb8";  // see sensor_msgs::image_encodings
       msg.is_bigendian = false;
 
@@ -162,9 +171,10 @@ namespace nuitrack_body_tracker
       int _width = frame->getCols(); 
       int _height = frame->getRows(); 
 
-    	const tdv::nuitrack::Color3* colorPtr = frame->getData();
+      const tdv::nuitrack::Color3* colorPtr = frame->getData();
 
       msg.header.stamp = ros::Time::now();
+      msg.header.frame_id = camera_color_frame_;
       msg.height = _height; 
       msg.width = _width;  
       msg.encoding = "rgb8";  //sensor_msgs::image_encodings::TYPE_16UC1;
@@ -190,25 +200,35 @@ namespace nuitrack_body_tracker
 
     void onUserUpdate(tdv::nuitrack::UserFrame::Ptr frame)
     {
-	    // std::cout << "Nuitrack: onUserUpdate callback" << std::endl;
+      // std::cout << "Nuitrack: onUserUpdate callback" << std::endl;
     }
 
 
     void onSkeletonUpdate(SkeletonData::Ptr userSkeletons)
     {
-	    // std::cout << "Nuitrack: onSkeletonUpdate callback" << std::endl;
+      // std::cout << "Nuitrack: onSkeletonUpdate callback" << std::endl;
+
+      // Message for array of body detections
+      body_tracker_msgs::BodyTrackerArray  body_tracker_array_msg;
+      body_tracker_array_msg.header.frame_id = camera_depth_frame_;
+      ros::Time frame_time_stamp = ros::Time::now();
+      body_tracker_array_msg.header.stamp = frame_time_stamp;
+
+//      body_tracker_msgs::BodyTrackerArray_ 
+//        <body_tracker_msgs::BodyTrackerArray> foo; // body_tracker_array_msg;
+
 
       // process skeletons for each user found
-	    auto skeletons = userSkeletons->getSkeletons();
-	    for (auto skeleton: skeletons)
-	    {
-	      // std::cout << "Nuitrack: Skeleton.id = " << skeleton.id << std::endl;
+      auto skeletons = userSkeletons->getSkeletons();
+      for (auto skeleton: skeletons)
+      {
+        // std::cout << "Nuitrack: Skeleton.id = " << skeleton.id << std::endl;
 
         // Use KEY_JOINT_TO_TRACK to determine if we have a good lock on the person
         float tracking_confidence = skeleton.joints[KEY_JOINT_TO_TRACK].confidence;
         if (tracking_confidence < 0.15)
         {
-  	      std::cout << "Nuitrack: ID " << skeleton.id << " Low Confidence (" 
+          std::cout << "Nuitrack: ID " << skeleton.id << " Low Confidence (" 
             << tracking_confidence << "), skipping"  << std::endl;
           continue;  // assume none of the joints are valid 
         }
@@ -223,9 +243,9 @@ namespace nuitrack_body_tracker
 
         ///////////////////////////////////////////////////////////////
         // Position data in 2D and 3D for tracking people
-        body_tracker_msgs::BodyTracker_ <body_tracker_msgs::BodyTracker> position_data;
+        body_tracker_msgs::BodyTracker position_data;
+//        body_tracker_msgs::BodyTracker_ <body_tracker_msgs::BodyTracker> position_data;
 
-        // position_data.frame_id = camera_depth_frame_;
         position_data.body_id = skeleton.id;
         position_data.tracking_status = 0; // TODO
         position_data.gesture = -1; // No gesture
@@ -494,12 +514,12 @@ namespace nuitrack_body_tracker
 
         // Hand:  open (0), grasping (1), waving (2)
         /* TODO - see which of these actually work
-	      GESTURE_WAVING          = 0,
-	      GESTURE_SWIPE_LEFT      = 1,
-	      GESTURE_SWIPE_RIGHT     = 2,
-	      GESTURE_SWIPE_UP        = 3,
-	      GESTURE_SWIPE_DOWN      = 4,
-	      GESTURE_PUSH            = 5,
+        GESTURE_WAVING          = 0,
+        GESTURE_SWIPE_LEFT      = 1,
+        GESTURE_SWIPE_RIGHT     = 2,
+        GESTURE_SWIPE_UP        = 3,
+        GESTURE_SWIPE_DOWN      = 4,
+        GESTURE_PUSH            = 5,
         in MSG:  -1 = none, 0 = waving, 1 = right fist, 2 = left fist
         By experimentation:
           Gesture 0:  Wave
@@ -517,7 +537,7 @@ namespace nuitrack_body_tracker
           {
             skeleton_data.gesture = userGestures_[i].type; // TODO - map Nuitrack to my MSG enum
             position_data.gesture = userGestures_[i].type; // TODO - map Nuitrack to my MSG enum
-		        printf("Reporting Gesture %d for User %d\n", 
+            printf("Reporting Gesture %d for User %d\n", 
               userGestures_[i].type, userGestures_[i].userId);
             userGestures_[i].type = (tdv::nuitrack::GestureType)(-1); // clear so we don't report old gestures
           }
@@ -525,10 +545,15 @@ namespace nuitrack_body_tracker
         }
 
         ////////////////////////////////////////////////////
-        // Publish custom position and skeleton messages
+        // Publish custom position and skeleton messages for each person found
 
+              
         body_tracking_position_pub_.publish(position_data); // position data
         body_tracking_skeleton_pub_.publish(skeleton_data); // full skeleton data
+
+        // Msg with array of position data for each person detected
+        body_tracker_array_msg.detected_list.push_back(position_data); 
+
 
         // Publish skeleton markers
 
@@ -560,28 +585,31 @@ namespace nuitrack_body_tracker
           skeleton_data.joint_position_spine_mid.z,
           0.0, 1.0, 0.0 ); // r,g,b
 
- 	    }
+      }
 
+      ////////////////////////////////////////////////////
+      // Publish custom array message with position info for all people found
+      body_tracking_array_pub_.publish(body_tracker_array_msg);
     }
 
 
     void onHandUpdate(HandTrackerData::Ptr handData)
     {
-	    // std::cout << "Nuitrack: onHandUpdate callback" << std::endl;
+      // std::cout << "Nuitrack: onHandUpdate callback" << std::endl;
     }
 
 
     void onNewGesture(GestureData::Ptr gestureData)
     {
-	    //std::cout << "Nuitrack: onNewGesture callback" << std::endl;
+      //std::cout << "Nuitrack: onNewGesture callback" << std::endl;
 
-	    userGestures_ = gestureData->getGestures(); // Save for use in next skeleton frame
-	    for (int i = 0; i < userGestures_.size(); ++i)
-	    {
-		    printf("onNewGesture: Gesture Recognized %d for User %d\n", 
+      userGestures_ = gestureData->getGestures(); // Save for use in next skeleton frame
+      for (int i = 0; i < userGestures_.size(); ++i)
+      {
+        printf("onNewGesture: Gesture Recognized %d for User %d\n", 
           userGestures_[i].type, userGestures_[i].userId);
 
-	    }
+      }
 
     }
 
@@ -660,24 +688,24 @@ namespace nuitrack_body_tracker
     ///////////////////////////////////////////////////////////////////////////
     void Init(const std::string& config)
     {
-	    // Initialize Nuitrack first, then create Nuitrack modules
+      // Initialize Nuitrack first, then create Nuitrack modules
       ROS_INFO("%s: Initializing...", _name.c_str());
-	    // std::cout << "Nuitrack: Initializing..." << std::endl;
+      // std::cout << "Nuitrack: Initializing..." << std::endl;
 
-	    std::cout << 
+      std::cout << 
       "\n============ IGNORE ERRORS THAT SAY 'Couldnt open device...' ===========\n" 
       << std::endl;
 
-	    try
-	    {
-		    tdv::nuitrack::Nuitrack::init(config);
-	    }
-	    catch (const tdv::nuitrack::Exception& e)
-	    {
-		    std::cerr << 
+      try
+      {
+        tdv::nuitrack::Nuitrack::init(config);
+      }
+      catch (const tdv::nuitrack::Exception& e)
+      {
+        std::cerr << 
         "Can not initialize Nuitrack (ExceptionType: " << e.type() << ")" << std::endl;
-		    exit(EXIT_FAILURE);
-	    }
+        exit(EXIT_FAILURE);
+      }
 
       // Set config values.  Overrides $NUITRACK_HOME/data/nuitrack.config
 
@@ -707,56 +735,56 @@ namespace nuitrack_body_tracker
       //Nuitrack::setConfigValue("DepthProvider.Mirror", "true");
 
 
-	    // Create all required Nuitrack modules
+      // Create all required Nuitrack modules
 
-	    std::cout << "Nuitrack: DepthSensor::create()" << std::endl;
-	    depthSensor_ = tdv::nuitrack::DepthSensor::create();
-	    // Bind to event new frame
-	    depthSensor_->connectOnNewFrame(std::bind(
+      std::cout << "Nuitrack: DepthSensor::create()" << std::endl;
+      depthSensor_ = tdv::nuitrack::DepthSensor::create();
+      // Bind to event new frame
+      depthSensor_->connectOnNewFrame(std::bind(
       &nuitrack_body_tracker_node::onNewDepthFrame, this, std::placeholders::_1));
-	
-	    std::cout << "Nuitrack: ColorSensor::create()" << std::endl;
-	    colorSensor_ = tdv::nuitrack::ColorSensor::create();
-	    // Bind to event new frame
-	    colorSensor_->connectOnNewFrame(std::bind(
+  
+      std::cout << "Nuitrack: ColorSensor::create()" << std::endl;
+      colorSensor_ = tdv::nuitrack::ColorSensor::create();
+      // Bind to event new frame
+      colorSensor_->connectOnNewFrame(std::bind(
       &nuitrack_body_tracker_node::onNewColorFrame, this, std::placeholders::_1));
-	
+  
       outputMode_ = depthSensor_->getOutputMode();
-    	OutputMode colorOutputMode = colorSensor_->getOutputMode();
-	    if (colorOutputMode.xres > outputMode_.xres)
-		    outputMode_.xres = colorOutputMode.xres;
-	    if (colorOutputMode.yres > outputMode_.yres)
-		    outputMode_.yres = colorOutputMode.yres;
+      OutputMode colorOutputMode = colorSensor_->getOutputMode();
+      if (colorOutputMode.xres > outputMode_.xres)
+        outputMode_.xres = colorOutputMode.xres;
+      if (colorOutputMode.yres > outputMode_.yres)
+        outputMode_.yres = colorOutputMode.yres;
 
       // Use the larger of color or depth frame size
-	    frame_width_ = outputMode_.xres;
-	    frame_height_ = outputMode_.yres;
+      frame_width_ = outputMode_.xres;
+      frame_height_ = outputMode_.yres;
       last_id_ = -1;
       std::cout << "========= Nuitrack: GOT DEPTH SENSOR =========" << std::endl;
-	    std::cout << "Nuitrack: Depth:  width = " << frame_width_ << 
-	      "  height = " << frame_height_ << std::endl;
+      std::cout << "Nuitrack: Depth:  width = " << frame_width_ << 
+        "  height = " << frame_height_ << std::endl;
 
-	    std::cout << "Nuitrack: UserTracker::create()" << std::endl;
-	    userTracker_ = tdv::nuitrack::UserTracker::create();
-	    // Bind to event update user tracker
-	    userTracker_->connectOnUpdate(std::bind(
+      std::cout << "Nuitrack: UserTracker::create()" << std::endl;
+      userTracker_ = tdv::nuitrack::UserTracker::create();
+      // Bind to event update user tracker
+      userTracker_->connectOnUpdate(std::bind(
         &nuitrack_body_tracker_node::onUserUpdate, this, std::placeholders::_1));
-	
-	    std::cout << "Nuitrack: SkeletonTracker::create()" << std::endl;
-	    skeletonTracker_ = tdv::nuitrack::SkeletonTracker::create();
-	    // Bind to event update skeleton tracker
-	    skeletonTracker_->connectOnUpdate(std::bind(
+  
+      std::cout << "Nuitrack: SkeletonTracker::create()" << std::endl;
+      skeletonTracker_ = tdv::nuitrack::SkeletonTracker::create();
+      // Bind to event update skeleton tracker
+      skeletonTracker_->connectOnUpdate(std::bind(
         &nuitrack_body_tracker_node::onSkeletonUpdate, this, std::placeholders::_1));
-	
-	    std::cout << "Nuitrack: HandTracker::create()" << std::endl;
-	    handTracker_ = tdv::nuitrack::HandTracker::create();
-	    // Bind to event update Hand tracker
-	    handTracker_->connectOnUpdate(std::bind(
+  
+      std::cout << "Nuitrack: HandTracker::create()" << std::endl;
+      handTracker_ = tdv::nuitrack::HandTracker::create();
+      // Bind to event update Hand tracker
+      handTracker_->connectOnUpdate(std::bind(
         &nuitrack_body_tracker_node::onHandUpdate, this, std::placeholders::_1));
-	
-	    std::cout << "Nuitrack: GestureRecognizer::create()" << std::endl;
-	    gestureRecognizer_ = tdv::nuitrack::GestureRecognizer::create();
-	    gestureRecognizer_->connectOnNewGestures(std::bind(
+  
+      std::cout << "Nuitrack: GestureRecognizer::create()" << std::endl;
+      gestureRecognizer_ = tdv::nuitrack::GestureRecognizer::create();
+      gestureRecognizer_->connectOnNewGestures(std::bind(
         &nuitrack_body_tracker_node::onNewGesture, this, std::placeholders::_1));
 
       ROS_INFO("%s: Init complete.  Waiting for frames...", _name.c_str());
@@ -765,9 +793,9 @@ namespace nuitrack_body_tracker
 
     void Run()
     {
-	    // Initialize Nuitrack first, then create Nuitrack modules
+      // Initialize Nuitrack first, then create Nuitrack modules
       ROS_INFO("%s: Running...", _name.c_str());
-	    // std::cout << "Nuitrack: Running..." << std::endl;
+      // std::cout << "Nuitrack: Running..." << std::endl;
       // Start Nuitrack
       try
       {
@@ -786,7 +814,7 @@ namespace nuitrack_body_tracker
       ros::Rate r(30); // hz
       while (ros::ok())
       {
-	        // std::cout << "Nuitrack: Looping..." << std::endl;
+          // std::cout << "Nuitrack: Looping..." << std::endl;
 
           try
           {
@@ -805,7 +833,7 @@ namespace nuitrack_body_tracker
                 << e.type() << ")" << std::endl;
           }
 
-	        // std::cout << "Nuitrack: Sleeping..." << std::endl;
+          // std::cout << "Nuitrack: Sleeping..." << std::endl;
           ros::spinOnce();
           r.sleep();
       }
@@ -830,9 +858,11 @@ namespace nuitrack_body_tracker
     std::string _name;
     ros::NodeHandle nh_;
     std::string camera_depth_frame_;
-	  int frame_width_, frame_height_;
+    std::string camera_color_frame_;    
+    int frame_width_, frame_height_;
     int last_id_;
     ros::Publisher body_tracking_position_pub_;
+    ros::Publisher body_tracking_array_pub_;
     ros::Publisher body_tracking_skeleton_pub_;
     ros::Publisher marker_pub_;
     ros::Publisher depth_image_pub_;
@@ -843,15 +873,15 @@ namespace nuitrack_body_tracker
     //ros::Publisher body_tracking_gesture_pub_;
     //ros::Subscriber servo_pan_sub_;
 
-	  tdv::nuitrack::OutputMode outputMode_;
-	  std::vector<tdv::nuitrack::Gesture> userGestures_;
-	  tdv::nuitrack::DepthSensor::Ptr depthSensor_;
-	  tdv::nuitrack::ColorSensor::Ptr colorSensor_;
-	  tdv::nuitrack::UserTracker::Ptr userTracker_;
-	  tdv::nuitrack::SkeletonTracker::Ptr skeletonTracker_;
-	  tdv::nuitrack::HandTracker::Ptr handTracker_;
-	  tdv::nuitrack::GestureRecognizer::Ptr gestureRecognizer_;
-	  //tdv::nuitrack::getInstancesJson::Ptr getInstancesJson;
+    tdv::nuitrack::OutputMode outputMode_;
+    std::vector<tdv::nuitrack::Gesture> userGestures_;
+    tdv::nuitrack::DepthSensor::Ptr depthSensor_;
+    tdv::nuitrack::ColorSensor::Ptr colorSensor_;
+    tdv::nuitrack::UserTracker::Ptr userTracker_;
+    tdv::nuitrack::SkeletonTracker::Ptr skeletonTracker_;
+    tdv::nuitrack::HandTracker::Ptr handTracker_;
+    tdv::nuitrack::GestureRecognizer::Ptr gestureRecognizer_;
+    //tdv::nuitrack::getInstancesJson::Ptr getInstancesJson;
 
 
     /* Note from http://download.3divi.com/Nuitrack/doc/Instance_based_API.html
@@ -868,8 +898,8 @@ namespace nuitrack_body_tracker
     using namespace nuitrack_body_tracker;
     ros::init( argc, argv, "nuitrack_body_tracker" );
     nuitrack_body_tracker_node node(ros::this_node::getName());
-	  node.Init("");
-		node.Run();
+    node.Init("");
+    node.Run();
 
     return 0;
   }

@@ -111,7 +111,12 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES nuitrack_body_tracker
-  CATKIN_DEPENDS roscpp std_msgs body_tracker_msgs
+  CATKIN_DEPENDS 
+    roscpp 
+    geometry_msgs
+    visualization_msgs
+    std_msgs 
+    body_tracker_msgs
 #  DEPENDS system_lib
 )
 
@@ -123,9 +128,6 @@ catkin_package(
 ## Your package locations should be listed before other locations
 include_directories(
 # include
-#  /home/system/NuitrackSDK/Nuitrack/include
-#  /home/system/NuitrackSDK/Nuitrack/include/middleware/}
-
   ${NUITRACK_SDK_PATH}/Nuitrack/include   
   ${NUITRACK_SDK_PATH}/Nuitrack/include/middleware  
   ${catkin_INCLUDE_DIRS}

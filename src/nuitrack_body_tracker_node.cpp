@@ -254,8 +254,9 @@ namespace nuitrack_body_tracker
         position_data.face_top = 0;
         position_data.face_width = 0;
         position_data.face_height = 0;
-        position_data.face_age = 0;
-        position_data.face_gender = 0;
+        position_data.person_age = 0;
+        position_data.person_gender = 0;
+        position_data.person_name = "";
 
         //if(skeleton.id != last_id_)
         {
@@ -421,8 +422,8 @@ namespace nuitrack_body_tracker
                       
                       if( age.first == "years")
                       {
-                        float face_age = age.second.get_value<float>();
-                        position_data.face_age = (int)face_age;
+                        float person_age = age.second.get_value<float>();
+                        position_data.person_age = (int)person_age;
                       }                      
 
                     }
@@ -431,11 +432,11 @@ namespace nuitrack_body_tracker
                     std::cout << "GENDER: " << gender << std::endl;
                     if("male" == gender)
                     {
-                      position_data.face_gender = 1;
+                      position_data.person_gender = 1;
                     }
                     else if("female" == gender)
                     {
-                      position_data.face_gender = 2;
+                      position_data.person_gender = 2;
                     }
 
                   }

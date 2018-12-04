@@ -243,20 +243,20 @@ namespace nuitrack_body_tracker
 
         ///////////////////////////////////////////////////////////////
         // Position data in 2D and 3D for tracking people
-        body_tracker_msgs::BodyTracker position_data;
-//        body_tracker_msgs::BodyTracker_ <body_tracker_msgs::BodyTracker> position_data;
+        body_tracker_msgs::BodyTracker person_data;
+//        body_tracker_msgs::BodyTracker_ <body_tracker_msgs::BodyTracker> person_data;
 
-        position_data.body_id = skeleton.id;
-        position_data.tracking_status = 0; // TODO
-        position_data.gesture = -1; // No gesture
-        position_data.face_found = false;
-        position_data.face_left = 0;
-        position_data.face_top = 0;
-        position_data.face_width = 0;
-        position_data.face_height = 0;
-        position_data.person_age = 0;
-        position_data.person_gender = 0;
-        position_data.person_name = "";
+        person_data.body_id = skeleton.id;
+        person_data.tracking_status = 0; // TODO
+        person_data.gesture = -1; // No gesture
+        person_data.face_found = false;
+        person_data.face_left = 0;
+        person_data.face_top = 0;
+        person_data.face_width = 0;
+        person_data.face_height = 0;
+        person_data.person_age = 0;
+        person_data.person_gender = 0;
+        person_data.person_name = "";
 
         //if(skeleton.id != last_id_)
         {
@@ -276,11 +276,11 @@ namespace nuitrack_body_tracker
         track2d.y = (skeleton.joints[KEY_JOINT_TO_TRACK].proj.y - 0.5) * ASTRA_MINI_FOV_Y;
         track2d.theta = (float)skeleton.id;
 
-        position_data.position2d.x = 
+        person_data.position2d.x = 
           (skeleton.joints[KEY_JOINT_TO_TRACK].proj.x - 0.5) * ASTRA_MINI_FOV_X;
-        position_data.position2d.y = 
+        person_data.position2d.y = 
           (skeleton.joints[KEY_JOINT_TO_TRACK].proj.y - 0.5) * ASTRA_MINI_FOV_Y;
-        position_data.position2d.z = skeleton.joints[KEY_JOINT_TO_TRACK].proj.z / 1000.0;
+        person_data.position2d.z = skeleton.joints[KEY_JOINT_TO_TRACK].proj.z / 1000.0;
 
         
         std::cout << std::setprecision(4) << std::setw(7) 
@@ -352,7 +352,7 @@ namespace nuitrack_body_tracker
                   {
                     // this is a face subtree
                     std::cout << "FACE FOUND " << std::endl;
-                    position_data.face_found = true;
+                    person_data.face_found = true;
                     float face_left, face_top, face_width, face_height;
                     face_left = face_top = face_width = face_height = 0.0;
 
@@ -367,22 +367,22 @@ namespace nuitrack_body_tracker
                       if( rectangle.first == "left")
                       {
                         face_left = rectangle.second.get_value<float>();
-                        position_data.face_left = (int)((float)frame_width_ * face_left);
+                        person_data.face_left = (int)((float)frame_width_ * face_left);
                       }                      
                       if( rectangle.first == "top")
                       {
                         face_top = rectangle.second.get_value<float>();
-                        position_data.face_top = (int)((float)frame_width_ * face_top);
+                        person_data.face_top = (int)((float)frame_width_ * face_top);
                       }                      
                       if( rectangle.first == "width")
                       {
                         face_width = rectangle.second.get_value<float>();
-                        position_data.face_width = (int)((float)frame_width_ * face_width);
+                        person_data.face_width = (int)((float)frame_width_ * face_width);
                       }                      
                       if( rectangle.first == "height")
                       {
                         face_height = rectangle.second.get_value<float>();
-                        position_data.face_height = (int)((float)frame_width_ * face_height);
+                        person_data.face_height = (int)((float)frame_width_ * face_height);
                       }                      
                     }
                     
@@ -391,16 +391,16 @@ namespace nuitrack_body_tracker
                     
                     float face_center_proj_x = face_left + (face_width / 2.0);
                     float face_center_proj_y = face_top + (face_height / 2.0);
-                    position_data.face_center.x = (face_center_proj_x - 0.5) * ASTRA_MINI_FOV_X;
-                    position_data.face_center.y =  (face_center_proj_y - 0.5) * ASTRA_MINI_FOV_Y;
+                    person_data.face_center.x = (face_center_proj_x - 0.5) * ASTRA_MINI_FOV_X;
+                    person_data.face_center.y =  (face_center_proj_y - 0.5) * ASTRA_MINI_FOV_Y;
                     // just use the skeleton location 
-                    position_data.face_center.z = skeleton.joints[JOINT_HEAD].real.z / 1000.0;
+                    person_data.face_center.z = skeleton.joints[JOINT_HEAD].real.z / 1000.0;
                     
                     //std::cout << "DBG face_center_proj = " << face_center_proj_x << ", " <<
                     //  face_center_proj_y << std::endl;
                       
-                    //std::cout << "DBG face_center_ROS = " << position_data.face_center.x << ", " <<
-                    //  position_data.face_center.y << std::endl;
+                    //std::cout << "DBG face_center_ROS = " << person_data.face_center.x << ", " <<
+                    //  person_data.face_center.y << std::endl;
 
                     
                     
@@ -423,7 +423,7 @@ namespace nuitrack_body_tracker
                       if( age.first == "years")
                       {
                         float person_age = age.second.get_value<float>();
-                        position_data.person_age = (int)person_age;
+                        person_data.person_age = (int)person_age;
                       }                      
 
                     }
@@ -432,11 +432,11 @@ namespace nuitrack_body_tracker
                     std::cout << "GENDER: " << gender << std::endl;
                     if("male" == gender)
                     {
-                      position_data.person_gender = 1;
+                      person_data.person_gender = 1;
                     }
                     else if("female" == gender)
                     {
-                      position_data.person_gender = 2;
+                      person_data.person_gender = 2;
                     }
 
                   }
@@ -464,9 +464,9 @@ namespace nuitrack_body_tracker
         //skeleton_data.centerOfMass.z = 0.0;
 
         // *** POSITION 3D ***
-        position_data.position3d.x = skeleton.joints[KEY_JOINT_TO_TRACK].real.z / 1000.0;
-        position_data.position3d.y = skeleton.joints[KEY_JOINT_TO_TRACK].real.x / 1000.0;
-        position_data.position3d.z = skeleton.joints[KEY_JOINT_TO_TRACK].real.y / 1000.0;
+        person_data.position3d.x = skeleton.joints[KEY_JOINT_TO_TRACK].real.z / 1000.0;
+        person_data.position3d.y = skeleton.joints[KEY_JOINT_TO_TRACK].real.x / 1000.0;
+        person_data.position3d.z = skeleton.joints[KEY_JOINT_TO_TRACK].real.y / 1000.0;
  
        
         skeleton_data.joint_position_head.x = skeleton.joints[JOINT_HEAD].real.z / 1000.0;
@@ -530,14 +530,14 @@ namespace nuitrack_body_tracker
         */
 
         skeleton_data.gesture = -1; // No gesture
-        position_data.gesture = -1; 
+        person_data.gesture = -1; 
         for (int i = 0; i < userGestures_.size(); ++i)
         {
           if( (userGestures_[i].userId == skeleton.id) && // match the person being reported
               (userGestures_[i].type > -1) )              // Not already reported             
           {
             skeleton_data.gesture = userGestures_[i].type; // TODO - map Nuitrack to my MSG enum
-            position_data.gesture = userGestures_[i].type; // TODO - map Nuitrack to my MSG enum
+            person_data.gesture = userGestures_[i].type; // TODO - map Nuitrack to my MSG enum
             printf("Reporting Gesture %d for User %d\n", 
               userGestures_[i].type, userGestures_[i].userId);
             userGestures_[i].type = (tdv::nuitrack::GestureType)(-1); // clear so we don't report old gestures
@@ -549,20 +549,20 @@ namespace nuitrack_body_tracker
         // Publish custom position and skeleton messages for each person found
 
               
-        body_tracking_position_pub_.publish(position_data); // position data
+        body_tracking_position_pub_.publish(person_data); // position data
         body_tracking_skeleton_pub_.publish(skeleton_data); // full skeleton data
 
         // Msg with array of position data for each person detected
-        body_tracker_array_msg.detected_list.push_back(position_data); 
+        body_tracker_array_msg.detected_list.push_back(person_data); 
 
 
         // Publish skeleton markers
 
         PublishMarker(  // show marker at KEY_JOINT_TO_TRACK location
           1, // ID
-          position_data.position3d.x, 
-          position_data.position3d.y, 
-          position_data.position3d.z, 
+          person_data.position3d.x, 
+          person_data.position3d.y, 
+          person_data.position3d.z, 
           1.0, 0.0, 0.0 ); // r,g,b
 
         PublishMarker(

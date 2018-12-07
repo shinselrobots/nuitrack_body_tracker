@@ -171,6 +171,8 @@ namespace nuitrack_body_tracker
       int _width = frame->getCols(); 
       int _height = frame->getRows(); 
 
+      //std::cout << "DBG COLOR:  Width = " << _width << " Height = " << _height << std::endl;
+
       const tdv::nuitrack::Color3* colorPtr = frame->getData();
 
       msg.header.stamp = ros::Time::now();
@@ -254,9 +256,9 @@ namespace nuitrack_body_tracker
         person_data.face_top = 0;
         person_data.face_width = 0;
         person_data.face_height = 0;
-        person_data.person_age = 0;
-        person_data.person_gender = 0;
-        person_data.person_name = "";
+        person_data.age = 0;
+        person_data.gender = 0;
+        person_data.name = "";
 
         //if(skeleton.id != last_id_)
         {
@@ -360,9 +362,9 @@ namespace nuitrack_body_tracker
                     {
                       // Face bounding box from 0.0 -> 1.0 (from top left of image) 
                       // convert to pixel position before publishing              
-                      std::string name = rectangle.first;
-                      std::string val = rectangle.second.data();
-                      std::cout << "FACE RECTANGLE: " << name << " : " << val << std::endl;
+                      std::string rec_name = rectangle.first;
+                      std::string rec_val = rectangle.second.data();
+                      //std::cout << "FACE RECTANGLE: " << rec_name << " : " << rec_val << std::endl;
                       
                       if( rectangle.first == "left")
                       {
@@ -372,7 +374,7 @@ namespace nuitrack_body_tracker
                       if( rectangle.first == "top")
                       {
                         face_top = rectangle.second.get_value<float>();
-                        person_data.face_top = (int)((float)frame_width_ * face_top);
+                        person_data.face_top = (int)((float)frame_height_ * face_top);
                       }                      
                       if( rectangle.first == "width")
                       {
@@ -382,7 +384,7 @@ namespace nuitrack_body_tracker
                       if( rectangle.first == "height")
                       {
                         face_height = rectangle.second.get_value<float>();
-                        person_data.face_height = (int)((float)frame_width_ * face_height);
+                        person_data.face_height = (int)((float)frame_height_ * face_height);
                       }                      
                     }
                     
@@ -406,37 +408,37 @@ namespace nuitrack_body_tracker
                     
                     for(boost::property_tree::ptree::value_type &angles : face.get_child("angles"))
                     {
-                      // rectangle is set of std::pair
-                      std::string name = angles.first;
-                      std::string val = angles.second.data();
-                      //std::cout << "FACE ANGLES: " << name << " : " << val << std::endl;
+                      // Face Angle (where the face is pointing)
+                      std::string angles_key = angles.first;
+                      std::string angles_val = angles.second.data();
+                      //std::cout << "FACE ANGLES: " << angles_key << " : " << angles_val << std::endl;
                       // Not currently published for ROS (future)
 
                     }
                     for(boost::property_tree::ptree::value_type &age : face.get_child("age"))
                     {
                       // rectangle is set of std::pair
-                      std::string name = age.first;
-                      std::string val = age.second.data();
-                      std::cout << "FACE AGE: " << name << " : " << val << std::endl;
+                      std::string age_key = age.first;
+                      std::string age_val = age.second.data();
+                      std::cout << "FACE AGE: " << age_key << " : " << age_val << std::endl;
                       
                       if( age.first == "years")
                       {
-                        float person_age = age.second.get_value<float>();
-                        person_data.person_age = (int)person_age;
+                        float float_age = age.second.get_value<float>();
+                        person_data.age = (int)float_age;
                       }                      
 
                     }
 
-                    std::string gender = face.get<std::string>("gender");
-                    std::cout << "GENDER: " << gender << std::endl;
-                    if("male" == gender)
+                    std::string gender_val = face.get<std::string>("gender");
+                    std::cout << "GENDER: " << gender_val << std::endl;
+                    if("male" == gender_val)
                     {
-                      person_data.person_gender = 1;
+                      person_data.gender = 1;
                     }
-                    else if("female" == gender)
+                    else if("female" == gender_val)
                     {
-                      person_data.person_gender = 2;
+                      person_data.gender = 2;
                     }
 
                   }
@@ -699,7 +701,8 @@ namespace nuitrack_body_tracker
 
       try
       {
-        tdv::nuitrack::Nuitrack::init(config);
+        tdv::nuitrack::Nuitrack::init("");
+        //tdv::nuitrack::Nuitrack::init(config);
       }
       catch (const tdv::nuitrack::Exception& e)
       {

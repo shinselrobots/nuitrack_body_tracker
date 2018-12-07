@@ -54,6 +54,7 @@
         - echo $LD_LIBRARY_PATH  (should include /usr/local/lib/nuitrack)
 
   - Install Nuitrack SDK (NuitrackSDK.zip)
+    - Download from: http://download.3divi.com/Nuitrack/
     - mkdir ~/sdk/NuitrackSDK
     - cp NuitrackSDK.zip ~/NuitrackSDK
     - extract ZIP archive with ubuntu Archive Manager (double click the zip file)
@@ -81,9 +82,6 @@
     - if you have a license, enter it after the test completes.
 
   - Follow instructions at: ~/sdk/NuitrackSDK/Examples/nuitrack_gl_sample/README.txt
-
-
-
 
 
 

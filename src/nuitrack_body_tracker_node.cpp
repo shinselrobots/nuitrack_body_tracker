@@ -79,7 +79,6 @@ namespace nuitrack_body_tracker
       _name(name)
     {
       ROS_INFO("%s: Starting...", _name.c_str());
-      bool initialized = false;
 
       ros::NodeHandle nodeHandle("~");
       nodeHandle.param<std::string>("camera_depth_frame",camera_depth_frame_,"camera_depth_frame");
@@ -126,7 +125,7 @@ namespace nuitrack_body_tracker
 
     void onNewColorFrame(RGBFrame::Ptr frame)
     {
-      // ROS_INFO("DBG: Nuitrack::onNewColorFrame()");
+      //ROS_INFO("DBG: Nuitrack::onNewColorFrame(), Frame = %d", ++color_frame_number_);
 
       if(!ENABLE_PUBLISHING_FRAMES)
       {
@@ -140,25 +139,11 @@ namespace nuitrack_body_tracker
 
       // Point Cloud message for colorized depth cloud      
       int numpoints = _width * _height;
-      cloud_msg_p = new(sensor_msgs::PointCloud2);
+      //cloud_msg_ = new(sensor_msgs::PointCloud2);
 
-      cloud_msg_p->header.frame_id = camera_depth_frame_;
-      cloud_msg_p->header.stamp = ros::Time::now();
-      cloud_msg_p->width  = numpoints;
-      cloud_msg_p->height = 1;
-      cloud_msg_p->is_bigendian = false;
-      cloud_msg_p->is_dense = false; // there may be invalid points
-
-      sensor_msgs::PointCloud2Modifier modifier(*cloud_msg_p);
-      modifier.setPointCloud2FieldsByString(2,"xyz","rgb");
-      modifier.resize(numpoints);
-      sensor_msgs::PointCloud2Iterator<uint8_t> out_r(*cloud_msg_p, "r");
-      sensor_msgs::PointCloud2Iterator<uint8_t> out_g(*cloud_msg_p, "g");
-      sensor_msgs::PointCloud2Iterator<uint8_t> out_b(*cloud_msg_p, "b");
-
-
-
-
+      sensor_msgs::PointCloud2Iterator<uint8_t> out_r(cloud_msg_, "r");
+      sensor_msgs::PointCloud2Iterator<uint8_t> out_g(cloud_msg_, "g");
+      sensor_msgs::PointCloud2Iterator<uint8_t> out_b(cloud_msg_, "b");
 
       sensor_msgs::Image color_msg;
 
@@ -192,20 +177,21 @@ namespace nuitrack_body_tracker
         colorPtr += _width; // Next row
       }
 
+      // Publish color frame
       color_image_pub_.publish(color_msg);
+     
     }
 
 
     void onNewDepthFrame(DepthFrame::Ptr frame)
     {
-      // ROS_INFO("DBG: Nuitrack::onNewDepthFrame()");
+      //ROS_INFO("DBG: Nuitrack::onNewDepthFrame(), Frame = %d", ++depth_frame_number_);
 
       if(!ENABLE_PUBLISHING_FRAMES)
       {
         return;
       }
 
-      
       int _width = frame->getCols(); 
       int _height = frame->getRows();
       const uint16_t* depthPtr = frame->getData();
@@ -224,10 +210,10 @@ namespace nuitrack_body_tracker
       depth_msg.step = 3 * _width; // sensor_msgs::ImagePtr row step size
       
 
-      // Point Cloud message, created in color callback
-      sensor_msgs::PointCloud2Iterator<float> out_x(*cloud_msg_p, "x");
-      sensor_msgs::PointCloud2Iterator<float> out_y(*cloud_msg_p, "y");
-      sensor_msgs::PointCloud2Iterator<float> out_z(*cloud_msg_p, "z");
+      // Point Cloud message
+      sensor_msgs::PointCloud2Iterator<float> out_x(cloud_msg_, "x");
+      sensor_msgs::PointCloud2Iterator<float> out_y(cloud_msg_, "y");
+      sensor_msgs::PointCloud2Iterator<float> out_z(cloud_msg_, "z");
       
      // std::cout << "=========================================================" << std::endl;
       //std::cout << "DEBUG: cloud x, y, z : world x, y, z " << std::endl;
@@ -253,40 +239,24 @@ namespace nuitrack_body_tracker
           float Y_World = cloud_point.y / 1000.0;
           float Z_World = cloud_point.z / 1000.0; 
           
-/*
-          std::cout << "cloud: " 
-          << cloud_point.x << ", " 
-          << cloud_point.y << ", " 
-          << cloud_point.z << 
-          
-          "   world: " 
-          << X_World << ", " 
-          << Y_World << ", " 
-          << Z_World << std::endl;         
-*/
-          
           *out_x = Z_World;
           *out_y = -X_World;
           *out_z = Y_World; 
-          
-          
-          //increment Iterators
           ++out_x;
           ++out_y;
           ++out_z;
-                   
 
         }
         depthPtr += _width; // Next row
       }
 
-     // std::cout << "=========================================================" << std::endl;
-
+      // Publish depth frame
       depth_image_pub_.publish(depth_msg);
-      depth_cloud_pub_.publish(*cloud_msg_p);
 
-      delete(cloud_msg_p);
-      
+      // Publish colorized depth cloud
+      cloud_msg_.header.stamp = ros::Time::now();
+      depth_cloud_pub_.publish(cloud_msg_);
+     
     }
 
     void onUserUpdate(tdv::nuitrack::UserFrame::Ptr frame)
@@ -826,7 +796,8 @@ namespace nuitrack_body_tracker
       //Options for debug
       //Nuitrack::setConfigValue("Skeletonization.ActiveUsers", "1");
       //Nuitrack::setConfigValue("DepthProvider.Mirror", "true");
-
+      depth_frame_number_ = 0;
+      color_frame_number_ = 0;
 
       // Create all required Nuitrack modules
 
@@ -856,6 +827,20 @@ namespace nuitrack_body_tracker
       std::cout << "========= Nuitrack: GOT DEPTH SENSOR =========" << std::endl;
       std::cout << "Nuitrack: Depth:  width = " << frame_width_ << 
         "  height = " << frame_height_ << std::endl;
+
+      // Point Cloud message (includes depth and color)
+      int numpoints = frame_width_ * frame_height_;
+      cloud_msg_.header.frame_id = camera_depth_frame_;
+      //cloud_msg_.header.stamp = ros::Time::now();
+      cloud_msg_.width  = numpoints;
+      cloud_msg_.height = 1;
+      cloud_msg_.is_bigendian = false;
+      cloud_msg_.is_dense = false; // there may be invalid points
+
+      sensor_msgs::PointCloud2Modifier modifier(cloud_msg_);
+      modifier.setPointCloud2FieldsByString(2,"xyz","rgb");
+      modifier.resize(numpoints);
+
 
       std::cout << "Nuitrack: UserTracker::create()" << std::endl;
       userTracker_ = tdv::nuitrack::UserTracker::create();
@@ -954,7 +939,9 @@ namespace nuitrack_body_tracker
     std::string camera_color_frame_;    
     int frame_width_, frame_height_;
     int last_id_;
-    sensor_msgs::PointCloud2 *cloud_msg_p; // color and depth point cloud
+    sensor_msgs::PointCloud2 cloud_msg_; // color and depth point cloud
+    int depth_frame_number_;
+    int color_frame_number_;
     
     ros::Publisher body_tracking_position_pub_;
     ros::Publisher body_tracking_array_pub_;

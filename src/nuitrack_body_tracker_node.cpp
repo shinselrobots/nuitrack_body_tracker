@@ -59,6 +59,11 @@
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/foreach.hpp>
 
+// For Point Cloud publishing
+#include <sensor_msgs/PointCloud2.h>
+#include <sensor_msgs/point_cloud2_iterator.h>
+// #include <pcl/point_types.h>
+
 const bool ENABLE_PUBLISHING_FRAMES = true;
 
 namespace nuitrack_body_tracker
@@ -104,6 +109,8 @@ namespace nuitrack_body_tracker
         ("camera/depth/image", 1);
       color_image_pub_ = nh_.advertise<sensor_msgs::Image>
         ("camera/color/image", 1);
+      depth_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>
+        ("camera/depth_cloud", 1);
 
     }
 
@@ -114,91 +121,173 @@ namespace nuitrack_body_tracker
 
     ///////////////////////////////////////////////////////////////////////////
     // Nuitrack callbacks
-    // Copy depth frame data, received from Nuitrack, to texture to visualize
-    void onNewDepthFrame(DepthFrame::Ptr frame)
-    {
-      //ROS_INFO("DBG: Nuitrack::onNewDepthFrame()");
-
-      if(!ENABLE_PUBLISHING_FRAMES)
-      {
-        return;
-      }
-
-      sensor_msgs::Image msg;
-      int _width = frame->getCols(); 
-      int _height = frame->getRows();
-
-      const uint16_t* depthPtr = frame->getData();
-
-      msg.header.stamp = ros::Time::now();
-      msg.header.frame_id = camera_depth_frame_;
-      msg.height = _height; 
-      msg.width = _width; 
-      msg.encoding = "rgb8";  // see sensor_msgs::image_encodings
-      msg.is_bigendian = false;
-
-      msg.step = 3 * _width; // sensor_msgs::ImagePtr row step size
-
-      for (size_t row = 0; row < _height; ++row)
-      {
-        for (size_t col = 0; col < _width; ++col )
-        {
-          uint16_t depthValue = *(depthPtr+ col) >> 5;
-
-          // RGB are all the same for depth (monochrome)
-          msg.data.push_back(depthValue); 
-          msg.data.push_back(depthValue);
-          msg.data.push_back(depthValue);
-
-        }
-        depthPtr += _width; // Next row
-      }
-
-      depth_image_pub_.publish(msg);
-
-    }
+    // WARNING!  THIS CODE ASSUMES COLOR AND DEPTH ARE SAME RESOLUTION!
+    // TO FIX THIS, SEE NUITRACK GL SAMPLE
 
     void onNewColorFrame(RGBFrame::Ptr frame)
     {
-      //ROS_INFO("DBG: Nuitrack::onNewColorFrame()");
+      // ROS_INFO("DBG: Nuitrack::onNewColorFrame()");
 
       if(!ENABLE_PUBLISHING_FRAMES)
       {
         return;
       }
 
-      sensor_msgs::Image msg;
       int _width = frame->getCols(); 
       int _height = frame->getRows(); 
-
       //std::cout << "DBG COLOR:  Width = " << _width << " Height = " << _height << std::endl;
+
+
+      // Point Cloud message for colorized depth cloud      
+      int numpoints = _width * _height;
+      cloud_msg_p = new(sensor_msgs::PointCloud2);
+
+      cloud_msg_p->header.frame_id = camera_depth_frame_;
+      cloud_msg_p->header.stamp = ros::Time::now();
+      cloud_msg_p->width  = numpoints;
+      cloud_msg_p->height = 1;
+      cloud_msg_p->is_bigendian = false;
+      cloud_msg_p->is_dense = false; // there may be invalid points
+
+      sensor_msgs::PointCloud2Modifier modifier(*cloud_msg_p);
+      modifier.setPointCloud2FieldsByString(2,"xyz","rgb");
+      modifier.resize(numpoints);
+      sensor_msgs::PointCloud2Iterator<uint8_t> out_r(*cloud_msg_p, "r");
+      sensor_msgs::PointCloud2Iterator<uint8_t> out_g(*cloud_msg_p, "g");
+      sensor_msgs::PointCloud2Iterator<uint8_t> out_b(*cloud_msg_p, "b");
+
+
+
+
+
+      sensor_msgs::Image color_msg;
 
       const tdv::nuitrack::Color3* colorPtr = frame->getData();
 
-      msg.header.stamp = ros::Time::now();
-      msg.header.frame_id = camera_color_frame_;
-      msg.height = _height; 
-      msg.width = _width;  
-      msg.encoding = "rgb8";  //sensor_msgs::image_encodings::TYPE_16UC1;
-      msg.is_bigendian = false;
+      color_msg.header.stamp = ros::Time::now();
+      color_msg.header.frame_id = camera_color_frame_;
+      color_msg.height = _height; 
+      color_msg.width = _width;  
+      color_msg.encoding = "rgb8";  //sensor_msgs::image_encodings::TYPE_16UC1;
+      color_msg.is_bigendian = false;
 
-      msg.step = 3 * _width; // sensor_msgs::ImagePtr row step size
+      color_msg.step = 3 * _width; // sensor_msgs::ImagePtr row step size
 
       for (size_t row = 0; row < _height; ++row)
       {
         for (size_t col = 0; col < _width; ++col )
         {
-          msg.data.push_back((colorPtr + col)->red); 
-          msg.data.push_back((colorPtr + col)->green);
-          msg.data.push_back((colorPtr + col)->blue);
+          color_msg.data.push_back((colorPtr + col)->red); 
+          color_msg.data.push_back((colorPtr + col)->green);
+          color_msg.data.push_back((colorPtr + col)->blue);
+          
+          *out_r = (colorPtr + col)->red; // pointcloud
+          *out_g = (colorPtr + col)->green;
+          *out_b = (colorPtr + col)->blue;      
+          ++out_r;
+          ++out_g;
+          ++out_b;
 
         }
         colorPtr += _width; // Next row
       }
 
-      color_image_pub_.publish(msg);
+      color_image_pub_.publish(color_msg);
     }
 
+
+    void onNewDepthFrame(DepthFrame::Ptr frame)
+    {
+      // ROS_INFO("DBG: Nuitrack::onNewDepthFrame()");
+
+      if(!ENABLE_PUBLISHING_FRAMES)
+      {
+        return;
+      }
+
+      
+      int _width = frame->getCols(); 
+      int _height = frame->getRows();
+      const uint16_t* depthPtr = frame->getData();
+
+      //std::cout << "DBG DEPTH:  Width = " << _width << " Height = " << _height << std::endl;
+
+
+      // Depth image message
+      sensor_msgs::Image depth_msg;
+      depth_msg.header.stamp = ros::Time::now();
+      depth_msg.header.frame_id = camera_depth_frame_;
+      depth_msg.height = _height; 
+      depth_msg.width = _width; 
+      depth_msg.encoding = "rgb8";  // see sensor_msgs::image_encodings
+      depth_msg.is_bigendian = false;
+      depth_msg.step = 3 * _width; // sensor_msgs::ImagePtr row step size
+      
+
+      // Point Cloud message, created in color callback
+      sensor_msgs::PointCloud2Iterator<float> out_x(*cloud_msg_p, "x");
+      sensor_msgs::PointCloud2Iterator<float> out_y(*cloud_msg_p, "y");
+      sensor_msgs::PointCloud2Iterator<float> out_z(*cloud_msg_p, "z");
+      
+     // std::cout << "=========================================================" << std::endl;
+      //std::cout << "DEBUG: cloud x, y, z : world x, y, z " << std::endl;
+
+      for (size_t row = 0; row < _height; ++row)
+      {
+        for (size_t col = 0; col < _width; ++col )
+        {
+          uint16_t fulldepthValue = *(depthPtr+ col);
+          uint16_t depthValue = *(depthPtr+ col) >> 5;
+          
+
+          // RGB are all the same for depth (monochrome)
+          depth_msg.data.push_back(depthValue); 
+          depth_msg.data.push_back(depthValue);
+          depth_msg.data.push_back(depthValue);
+          
+          
+          //store xyz in point cloud, transforming from image coordinates, (Z Forward to X Forward)
+          Vector3 cloud_point = depthSensor_->convertProjToRealCoords(col, row, fulldepthValue );
+          
+          float X_World = cloud_point.x / 1000.0; // mm to meters
+          float Y_World = cloud_point.y / 1000.0;
+          float Z_World = cloud_point.z / 1000.0; 
+          
+/*
+          std::cout << "cloud: " 
+          << cloud_point.x << ", " 
+          << cloud_point.y << ", " 
+          << cloud_point.z << 
+          
+          "   world: " 
+          << X_World << ", " 
+          << Y_World << ", " 
+          << Z_World << std::endl;         
+*/
+          
+          *out_x = Z_World;
+          *out_y = -X_World;
+          *out_z = Y_World; 
+          
+          
+          //increment Iterators
+          ++out_x;
+          ++out_y;
+          ++out_z;
+                   
+
+        }
+        depthPtr += _width; // Next row
+      }
+
+     // std::cout << "=========================================================" << std::endl;
+
+      depth_image_pub_.publish(depth_msg);
+      depth_cloud_pub_.publish(*cloud_msg_p);
+
+      delete(cloud_msg_p);
+      
+    }
 
     void onUserUpdate(tdv::nuitrack::UserFrame::Ptr frame)
     {
@@ -755,12 +844,12 @@ namespace nuitrack_body_tracker
   
       outputMode_ = depthSensor_->getOutputMode();
       OutputMode colorOutputMode = colorSensor_->getOutputMode();
-      if (colorOutputMode.xres > outputMode_.xres)
-        outputMode_.xres = colorOutputMode.xres;
-      if (colorOutputMode.yres > outputMode_.yres)
-        outputMode_.yres = colorOutputMode.yres;
+      if ((colorOutputMode.xres != outputMode_.xres) || (colorOutputMode.yres != outputMode_.yres))
+      {
+          ROS_WARN("%s: WARNING! DEPTH AND COLOR SIZE NOT THE SAME!", _name.c_str() );
+      }
 
-      // Use the larger of color or depth frame size
+      // Use depth as the frame size
       frame_width_ = outputMode_.xres;
       frame_height_ = outputMode_.yres;
       last_id_ = -1;
@@ -865,12 +954,15 @@ namespace nuitrack_body_tracker
     std::string camera_color_frame_;    
     int frame_width_, frame_height_;
     int last_id_;
+    sensor_msgs::PointCloud2 *cloud_msg_p; // color and depth point cloud
+    
     ros::Publisher body_tracking_position_pub_;
     ros::Publisher body_tracking_array_pub_;
     ros::Publisher body_tracking_skeleton_pub_;
     ros::Publisher marker_pub_;
     ros::Publisher depth_image_pub_;
     ros::Publisher color_image_pub_;
+    ros::Publisher depth_cloud_pub_;
 
     //ros::Publisher body_tracking_pose2d_pub_;
     //ros::Publisher body_tracking_pose3d_pub_;
